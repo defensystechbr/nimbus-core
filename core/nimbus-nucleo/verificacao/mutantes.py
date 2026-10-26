@@ -4,8 +4,13 @@
 Planta, um de cada vez, defeitos em pontos críticos de segurança e confere se algum teste percebe.
 Mutante "morto" = um teste falhou (bom). Mutante "vivo" = nenhum teste percebeu (teste fraco: corrigir).
 Uso: python3 verificacao/mutantes.py   (variável CARGO opcional, padrão "cargo")
+
+Amostra (fluxo de desenvolvimento): MUTANTES_AMOSTRA=40 escolhe 40 defeitos determinísticos pelo hash do
+commit (MUTANTES_SEMENTE, padrão `git rev-parse HEAD`). A escolha muda a cada commit, então o catálogo
+inteiro é coberto ao longo do tempo; a campanha dos 356 continua no sentinela diário. O catálogo NUNCA
+encolhe: `--conferir` confere os 356 trechos mesmo quando só uma amostra roda.
 """
-import os, subprocess, sys
+import os, random, subprocess, sys
 
 CARGO = os.environ.get("CARGO", "cargo")
 MUTANTES = [
@@ -520,6 +525,16 @@ def trechos_quebrados():
         if n != 1: ruins.append(f"[{i:02}] {descricao} — trecho encontrado {n} vez(es) em {arq}")
     return ruins
 
+def _semente():
+    """Hash do commit em verificação. Sem git (ex.: cópia avulsa), cai num valor fixo: ainda determinístico."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return "local"
+
 def main():
     # Pasta de compilação compartilhada com outra cópia do núcleo: o Cargo pode reaproveitar o binário da outra
     # cópia e dar um defeito plantado como pego (ou como vivo) sem ter compilado este. Reprova antes de começar.
@@ -537,11 +552,26 @@ def main():
     # Faixa opcional: python3 verificacao/mutantes.py 1 20  (roda só os mutantes 1 a 20)
     de = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     ate = int(sys.argv[2]) if len(sys.argv) > 2 else len(MUTANTES)
+    # Amostra determinística pelo hash do commit: o fluxo de desenvolvimento não espera a campanha inteira,
+    # e a escolha muda a cada commit, então o catálogo é coberto ao longo do tempo. A campanha dos 356
+    # continua obrigatória no sentinela diário.
+    amostra = int(os.environ.get("MUTANTES_AMOSTRA", "0") or 0)
+    escolhidos = None
+    semente = ""
+    if amostra:
+        n = len(MUTANTES)
+        if not 1 <= amostra <= n:
+            print(f"ERRO: MUTANTES_AMOSTRA={amostra} fora de 1..{n}"); sys.exit(2)
+        semente = os.environ.get("MUTANTES_SEMENTE") or _semente()
+        escolhidos = set(random.Random(semente).sample(range(1, n + 1), amostra))
+        print(f"Amostra: {amostra} de {n} defeitos plantados, semente {semente[:12]}")
     if not testes_passam():
         print("Os testes precisam passar antes da mutação."); sys.exit(2)
     vivos = []
     rodados = 0
     for i, (arq, original, mutado, descricao) in enumerate(MUTANTES, 1):
+        if escolhidos is not None and i not in escolhidos:
+            continue
         if i < de or i > ate:
             continue
         rodados += 1
@@ -567,7 +597,10 @@ def main():
             print(f"[{i:02}] ERRO: o defeito plantado não compila (não testa nada) · {descricao}"); vivos.append(descricao); continue
         print(f"[{i:02}] {'morto' if pego else 'VIVO '} · {descricao}")
         if not pego: vivos.append(descricao)
-    print(f"\nResultado: {rodados - len(vivos)} de {rodados} defeitos plantados foram pegos pelos testes (mutantes {de} a {min(ate, len(MUTANTES))} de {len(MUTANTES)}).")
+    if escolhidos is not None:
+        print(f"\nResultado: {rodados - len(vivos)} de {rodados} defeitos plantados da amostra foram pegos (semente {semente[:12]}, catálogo {len(MUTANTES)}).")
+    else:
+        print(f"\nResultado: {rodados - len(vivos)} de {rodados} defeitos plantados foram pegos pelos testes (mutantes {de} a {min(ate, len(MUTANTES))} de {len(MUTANTES)}).")
     if vivos:
         print("Vivos (testes a reforçar):"); [print("  -", v) for v in vivos]; sys.exit(1)
 

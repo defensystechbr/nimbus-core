@@ -255,11 +255,18 @@ if len(sys.argv) > 1:
     ci = os.path.join(kit, '.github', 'workflows', 'nimbus-kit-ci.yml')
     if os.path.isfile(ci):
         t_ = open(ci, encoding='utf-8').read()
-        for trecho in ['  governanca:', '  liberacao:', 'needs: [verificacao, segredos, banco, catraca, procedencia, governanca]', 'environment: liberacao', 'vars.LIBERACAO_ATIVA', './verificar.sh --completo', 'git clone --depth 1 https://github.com/RustSec/advisory-db']:
+        for trecho in ['  governanca:', '  liberacao:', 'needs: [verificacao, segredos, banco, catraca, procedencia, governanca]', 'environment: liberacao', 'vars.LIBERACAO_ATIVA', './verificar.sh --amostra', 'git clone --depth 1 https://github.com/RustSec/advisory-db']:
             if trecho not in t_: falha(f'CI do kit sem: {trecho.strip()}')
         sent_ = os.path.join(kit, '.github', 'workflows', 'sentinela-diaria.yml')
-        if not os.path.isfile(sent_) or 'git clone --depth 1 https://github.com/RustSec/advisory-db' not in open(sent_, encoding='utf-8').read():
+        # A amostra do fluxo só é aceitável porque a campanha INTEGRAL dos defeitos plantados é obrigatória
+        # todo dia. Se o sentinela perder o `--completo`, a amostra vira a única mutação do projeto.
+        if not os.path.isfile(sent_):
+            falha('sentinela diária ausente')
+        sent_t = open(sent_, encoding='utf-8').read()
+        if 'git clone --depth 1 https://github.com/RustSec/advisory-db' not in sent_t:
             falha('sentinela diária sem a base de avisos do dia')
+        if './verificar.sh --completo' not in sent_t:
+            falha('sentinela diária sem a campanha integral de mutação (./verificar.sh --completo)')
         # Ferramentas de CI com versão fixada: instalar "a mais nova" no CI é porta de ataque à cadeia de suprimentos.
         for wf in glob.glob(os.path.join(kit, '.github', 'workflows', '*.yml')):
             for l_ in open(wf, encoding='utf-8'):
