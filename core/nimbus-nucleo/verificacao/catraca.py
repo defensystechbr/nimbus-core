@@ -123,7 +123,10 @@ for raiz_regras in [os.path.join(NUCLEO, '.github', 'regras')] + ([KIT_REGRAS_] 
 
 # 6f. Escudo nativo: quando o núcleo está num kit, os dois arquivos do escudo existem e mantêm as travas.
 if os.path.basename(os.path.dirname(NUCLEO)) == 'core':
-    KIT_ = os.path.dirname(os.path.dirname(NUCLEO)); NOME_ = os.path.basename(KIT_)
+    KIT_ = os.path.dirname(os.path.dirname(NUCLEO))
+    # Nome do produto, nao o nome do diretorio do kit. Derivar do basename reprovava a catraca
+    # sempre que o repositorio era clonado com outro nome (nimbus-core em vez de nimbuschat).
+    NOME_ = 'nimbuschat'
     for rel_, travas_ in ((f'apps/{NOME_}-android/escudo/EscudoNativo.kt', ['FLAG_SECURE', 'setRecentsScreenshotEnabled(false)', 'filterTouchesWhenObscured = true', 'IME_FLAG_NO_PERSONALIZED_LEARNING', 'clearPrimaryClip()', 'isClientSilenced', 'onCameraUnavailable', 'setIsStrongBoxBacked(true)', 'setUnlockedDeviceRequired(true)', 'esquecerChaveAoSair']),
                           (f'apps/{NOME_}-ios/Escudo/EscudoNativo.swift', ['id != .keyboard', 'UIPasteboard.general.items = []', 'isExcludedFromBackup = true', 'FileProtectionType.complete', 'videoDeviceInUseByAnotherClient', 'sceneCaptureState', 'tomarMicrofoneComExclusividade', 'options: [])', 'kSecAttrAccessibleWhenUnlockedThisDeviceOnly', 'apagarChavesDeInstalacaoAnterior', 'esquecerChaveAoSair'])):
         cam_ = os.path.join(KIT_, rel_)
