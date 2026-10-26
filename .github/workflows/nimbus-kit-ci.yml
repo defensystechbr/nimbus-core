@@ -46,9 +46,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16
       - name: Testes de RLS e defeitos plantados no esquema
         run: |
-          sudo chown -R postgres servidor/banco
-          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
-          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
+          PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
+          PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
   catraca:
     runs-on: ubuntu-24.04
     steps:

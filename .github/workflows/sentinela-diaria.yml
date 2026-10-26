@@ -26,9 +26,8 @@ jobs:
         run: ./verificar.sh --completo
       - name: Banco (RLS, sentinela do banco e defeitos plantados)
         run: |
-          sudo chown -R postgres servidor/banco
-          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
-          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
+          PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
+          PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
       - name: Governança do repositório e da organização
         env:
           GH_TOKEN: ${{ github.token }}
