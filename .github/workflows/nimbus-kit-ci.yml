@@ -83,7 +83,14 @@ jobs:
         run: |
           echo "Para conferir: gh attestation verify nimbus-fonte.tar.gz --repo ${{ github.repository }}"
   governanca:
-    # Proteção do repositório, commit assinado e revisão de duas pessoas, conferidos na API do GitHub.
+    # Proteção do repositório, commit assinado e revisão, conferidos na API do GitHub.
+    # Roda no envio à principal, não no pedido de mudança: o portão confere o commit que ENTROU, e num pedido
+    # aberto não existe merge para conferir — rodar ali só produziria vermelho sem informação.
+    # A administração da ORGANIZAÇÃO (segundo fator, dois administradores, equipe de segurança) só entra com
+    # --estrito, no selo de liberação: depende de ser dono da organização, o que quem administra o repositório não
+    # é. Sem --estrito este trabalho confere o que a API pública de branches devolve e diz no log o que ficou de
+    # fora (passe livre e regras de tag), em vez de fingir que conferiu.
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -104,12 +111,13 @@ jobs:
           name: governanca
           path: governanca.txt
   liberacao:
-    # Selo de liberação: só existe se TODOS os portões passaram. A tarefa só roda depois de todas as outras
-    # aprovarem (needs) e dentro do ambiente "liberacao", que exige aprovação humana para rodar.
+    # Selo de liberação: só existe se TODOS os portões passaram, inclusive a administração da organização.
+    # Não roda a cada envio: o dono decide quando liberar ligando a variável do repositório LIBERACAO_ATIVA=true,
+    # e o ambiente "liberacao" pede a aprovação dele antes de rodar. Liberar é ato manual, sempre.
     # A segunda assinatura é do responsável de segurança, offline (GUIA_DE_LIBERACAO.md).
     runs-on: ubuntu-24.04
     needs: [verificacao, segredos, banco, catraca, procedencia, governanca]
-    if: github.ref == 'refs/heads/principal'
+    if: github.ref == 'refs/heads/principal' && vars.LIBERACAO_ATIVA == 'true'
     environment: liberacao
     permissions:
       contents: read
@@ -120,11 +128,11 @@ jobs:
           persist-credentials: false
       - name: Rust fixado
         run: rustup toolchain install 1.91.1 --profile minimal
-      - name: Governança aprovada (refeita aqui, não copiada)
+      - name: Governança aprovada (refeita aqui, não copiada), incluindo a organização
         env:
           GH_TOKEN: ${{ github.token }}
           PROTECAO_LEITURA: ${{ secrets.PROTECAO_LEITURA }}
-        run: python3 verificacao/portoes_de_governanca.py > governanca.txt
+        run: python3 verificacao/portoes_de_governanca.py --estrito > governanca.txt
       - name: Montar e assinar o selo (chave do CI)
         env:
           SELO_SEMENTE_CI: ${{ secrets.SELO_SEMENTE_CI }}

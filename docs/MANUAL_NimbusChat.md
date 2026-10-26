@@ -1169,6 +1169,12 @@ A arquitetura vale para a ferramenta toda: servidor, celular (iOS e Android) e c
 
 ## A6Z4. Sentinela, duas pessoas para toda mudança e procedência
 
+> **Nota de 26/10/2026.** Os itens GOV1 e GOV6 descrevem o regime **alvo** (duas aprovações). O regime **vigente** é
+> aprovador único, o dono, por decisão registrada em `docs/DECISAO_APROVADOR_UNICO.md`: o que saiu foi a segunda
+> aprovação humana; continuam exigidos pedido de mudança, commit assinado, histórico linear, sem força nem
+> apagamento, verificações obrigatórias e nenhum passe livre. O portão `administracao_dupla` (segundo fator, dois
+> administradores, equipe de segurança) continua exigido no selo de liberação e continua aberto na organização.
+
 - **SEN1 \[SIM\]** Sentinela na partida e periódica (servidor a cada hora, app a cada abertura): invariantes de segurança (rotas, limites, prazos, esperas, parâmetros de senha) e autotestes criptográficos (cifra, adulteração, chave malformada, assinatura hedged, gerador de números aleatórios) (sentinela::autoverificar). Prova C108.
 
 - **SEN2 \[SIM\]** Qualquer achado trava: o servidor não atende e o app não abre conteúdo (falha fechada); o relatório diz o código, o lugar e como corrigir, sem conteúdo nem segredo (sentinela::Relatorio::texto). Prova C108.

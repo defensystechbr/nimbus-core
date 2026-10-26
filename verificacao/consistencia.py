@@ -20,7 +20,13 @@ docs = ' '.join(open(f, encoding='utf-8').read() for f in glob.glob('docs/*.md')
 # válida" (achado ao reconciliar PENDENCIAS_E_DECISOES.md contra este conferidor; o próprio parágrafo
 # que descreve a correção de 'clippy::bool_assert_comparison' citado assim recriava o falso positivo).
 docs_para_citacoes = re.sub(r'``[^\n]*?``', ' ', docs)
+# Namespaces que não são do núcleo: `env::var` num exemplo de código de documento é Rust padrão (ou de uma
+# biblioteca), não uma citação de módulo do núcleo. Sem esta lista, o exemplo que mostra justamente o padrão
+# PROIBIDO (`env::var` para segredo de produção, em PENDENCIAS_E_DECISOES.md) era lido como citação inválida e
+# reprovava a consistência — o documento que denuncia o defeito virava o defeito. Achado em 26/10/2026.
+FORA_DO_NUCLEO = {'env', 'std', 'core', 'alloc', 'tokio', 'serde', 'clippy', 'rusqlite', 'ring', 'zeroize'}
 for mod, a, b in set(re.findall(r'`([a-z_]+)::([A-Za-z_0-9]+)(?:::([A-Za-z_0-9]+))?', docs_para_citacoes)):
+    if mod in FORA_DO_NUCLEO: continue
     nome = b or a
     # Rodada 26: 'static' estava faltando (pegava `const`/`fn`/`struct`/`enum`/`type` mas não
     # `pub static NOME: ...` — achado real via `codec_palavras::LISTA_DE_PALAVRAS`, que existe no

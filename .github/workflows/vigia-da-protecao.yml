@@ -1,7 +1,10 @@
-# Vigia da proteção: confere de hora em hora (e a cada envio) que a proteção da branch principal continua exatamente
-# como no código (.github/regras/protecao-principal.json). Se alguém afrouxar, este fluxo reprova e notifica.
-# Precisa do segredo PROTECAO_LEITURA: token de granularidade fina com permissão SOMENTE de leitura em
-# "Administration" deste repositório (não escreve nada, não lê código).
+# Vigia da proteção: confere de hora em hora (e a cada envio) que a proteção da branch principal continua como no
+# código (.github/regras/protecao-principal.json). Se alguém afrouxar, este fluxo reprova e notifica.
+#
+# Com o segredo PROTECAO_LEITURA (token de granularidade fina, só leitura em "Administration") confere também
+# passe livre e regras de tag. SEM ele, confere o que a API pública de branches devolve — tipo de regra, número de
+# aprovações e verificações exigidas — e diz em voz alta o que ficou de fora, em vez de reprovar por não ter o
+# token: um vermelho que ninguém consegue consertar não protege nada, só treina todo mundo a ignorar o vigia.
 name: vigia-da-protecao
 on:
   # Na hora: qualquer mudança na proteção clássica da branch dispara o vigia na mesma hora.
@@ -24,15 +27,24 @@ jobs:
           GH_TOKEN: ${{ secrets.PROTECAO_LEITURA }}
           REPO: ${{ github.repository }}
         run: |
-          ID=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id')
-          test -n "$ID" || { echo "PROTEÇÃO AUSENTE: rode .github/regras/aplicar_protecao.sh"; exit 1; }
-          gh api "repos/$REPO/rulesets/$ID" > ativa.json
-          python3 - <<'PY'
-          import json, sys
+          if [ -n "${GH_TOKEN:-}" ]; then
+            ID=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id')
+            test -n "$ID" || { echo "PROTEÇÃO AUSENTE: rode .github/regras/aplicar_protecao.sh"; exit 1; }
+            gh api "repos/$REPO/rulesets/$ID" > ativa.json
+            MODO=completo
+          else
+            echo "::warning::PROTECAO_LEITURA ausente: conferindo só o que a API pública devolve (passe livre e regras de tag NÃO conferidos)."
+            gh api "repos/$REPO/rules/branches/principal" > ativa.json
+            MODO=publico
+          fi
+          MODO="$MODO" python3 - <<'PY'
+          import json, os, sys
           a = json.load(open('ativa.json')); e = json.load(open('.github/regras/protecao-principal.json'))
+          completo = os.environ.get('MODO') == 'completo'
           erros = []
-          if a.get('enforcement') != 'active': erros.append('regra não está ativa')
-          if a.get('bypass_actors'): erros.append('existe quem possa passar por cima da regra')
+          if completo:
+              if a.get('enforcement') != 'active': erros.append('regra não está ativa')
+              if a.get('bypass_actors'): erros.append('existe quem possa passar por cima da regra')
           tipos_a = {r['type']: r.get('parameters', {}) for r in a.get('rules', [])}
           for r in e['rules']:
               t = r['type']
@@ -47,5 +59,5 @@ jobs:
                   elif tipos_a[t].get(k) != v: erros.append(f'{t}.{k} diferente do código')
           if erros:
               print('PROTEÇÃO AFROUXADA:'); [print(' -', x) for x in erros]; sys.exit(1)
-          print('Proteção da branch principal conferida: igual ao código.')
+          print('Proteção da branch principal conferida: igual ao código' + ('' if completo else ' (modo público, parcial)') + '.')
           PY

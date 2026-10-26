@@ -55,7 +55,7 @@ Atalho que mais economiza tempo: **cada tela do protótipo já diz a função do
 
 ## 5. Blindagem contra código malicioso — de pessoas ou de IA
 
-- **Ninguém sozinho:** revisão de duas pessoas em toda alteração; ramo `principal` protegido; commits assinados; chave física para quem tem acesso ao repositório.
+- **Ninguém sozinho:** ramo `principal` protegido, commits assinados, chave física para quem tem acesso ao repositório. Revisão humana em toda alteração: **duas pessoas** é a meta; o regime vigente é aprovador único (o dono), declarado em `docs/DECISAO_APROVADOR_UNICO.md`.
 - **Ninguém publica sozinho:** versão só com 3 de 5 assinaturas (módulo `aprovacao`, tipo Publicação), incluindo o auditor externo; o app só instala versão presente no registro público (módulo `registro`).
 - **Dependências travadas:** `Cargo.lock`, `Package.resolved`, lockfile do Gradle; `cargo audit` e `cargo deny` no pipeline; inventário SBOM a cada versão; compilação de release sem acesso à internet.
 - **IA no desenvolvimento:** permitida como assistente. Todo código gerado por IA passa pela mesma revisão em dupla, testes e varredura. IA **nunca** recebe segredos, chaves ou dados de usuários, nunca tem permissão de escrita no ramo principal nem acesso à produção. Cuidado com instruções escondidas em arquivos, tickets ou páginas lidas por agentes de IA. Toda biblioteca sugerida por IA é conferida pelo nome exato — atacantes registram nomes parecidos ou inventados por IA.

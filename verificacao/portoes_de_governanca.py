@@ -4,31 +4,41 @@
   protecao_do_repositorio  — TODAS as regras do código (.github/regras/*.json: branch principal, todas as branches e
                              tags) estão ativas e iguais, com o mesmo alvo e as mesmas branches/tags, sem passe livre
   commits_assinados        — o commit que vai virar artefato tem assinatura verificada pelo GitHub
-  revisao_de_duas_pessoas  — o pedido de mudança desse commit teve pelo menos 2 aprovações finais de pessoas
-                             diferentes do autor
+  revisao_de_duas_pessoas  — o pedido de mudança desse commit teve pelo menos o número de aprovações finais exigido
+                             pela política declarada em .github/regras/protecao-principal.json (hoje 0: aprovador
+                             único, o dono aprova no merge). O nome do portão é histórico e está gravado no selo.
   administracao_dupla      — a organização exige segundo fator para todos, tem pelo menos 2 administradores e a
                              equipe de segurança tem pelo menos 2 membros (ninguém sozinho nela)
-                             LIMITE: a API do GitHub não diz QUAL segundo fator cada pessoa usa; "chave física" é
-                             conferida por processo (GUIA_DE_LIBERACAO.md), não por esta verificação.
+                             Só é conferido com --estrito, porque depende de administração da ORGANIZAÇÃO, que hoje
+                             está fora do alcance de quem tem admin só no repositório. Sem --estrito ele não é
+                             emitido e não segura o merge; continua sendo exigido pelo selo de liberação.
+
+Duas formas de conferir a proteção, e a diferença dita sem enfeite:
+  com PROTECAO_LEITURA (token de administração)  confere tudo, inclusive passe livre e regras de tag;
+  sem ele                                         cobre só o que a API pública de branches devolve (tipo de regra,
+                                                  aprovações, verificações exigidas); passe livre e tags ficam
+                                                  NÃO conferidos, com aviso explícito no stderr.
 
 Saída (stdout): "protecao_do_repositorio=1,commits_assinados=1,revisao_de_duas_pessoas=1" (0 quando reprova).
 Os motivos de cada reprovação vão para stderr. Sai com código 1 se qualquer portão reprovar.
-Uso no CI: GH_TOKEN (leitura do repositório e dos pedidos) e PROTECAO_LEITURA (leitura de administração).
+Uso no CI: GH_TOKEN (leitura do repositório e dos pedidos), PROTECAO_LEITURA opcional (leitura de administração)
+e --estrito para incluir a organização.
 Uso em teste: python3 portoes_de_governanca.py --teste
 """
 import json, os, sys, urllib.request
 
-def comparar_protecao(ativa, esperada):
+def comparar_protecao(ativa, esperada, parcial=False):
     erros = []
-    if ativa.get('enforcement') != 'active': erros.append('regra não está ativa')
-    if ativa.get('bypass_actors'): erros.append('existe quem possa passar por cima da regra')
-    # Alvo e condições têm de ser exatamente os do código: uma regra completa apontando para outra branch
-    # (ou para tags em vez de branches) protege o nada.
-    if ativa.get('target', 'branch') != esperada.get('target', 'branch'): erros.append('alvo da regra diferente do código')
-    ref_a = ((ativa.get('conditions') or {}).get('ref_name') or {})
-    ref_e = ((esperada.get('conditions') or {}).get('ref_name') or {})
-    if sorted(ref_a.get('include', [])) != sorted(ref_e.get('include', [])) or sorted(ref_a.get('exclude', [])) != sorted(ref_e.get('exclude', [])):
-        erros.append('a regra protege branches ou tags diferentes das do código')
+    if not parcial:
+        if ativa.get('enforcement') != 'active': erros.append('regra não está ativa')
+        if ativa.get('bypass_actors'): erros.append('existe quem possa passar por cima da regra')
+        # Alvo e condições têm de ser exatamente os do código: uma regra completa apontando para outra branch
+        # (ou para tags em vez de branches) protege o nada.
+        if ativa.get('target', 'branch') != esperada.get('target', 'branch'): erros.append('alvo da regra diferente do código')
+        ref_a = ((ativa.get('conditions') or {}).get('ref_name') or {})
+        ref_e = ((esperada.get('conditions') or {}).get('ref_name') or {})
+        if sorted(ref_a.get('include', [])) != sorted(ref_e.get('include', [])) or sorted(ref_a.get('exclude', [])) != sorted(ref_e.get('exclude', [])):
+            erros.append('a regra protege branches ou tags diferentes das do código')
     tipos = {r['type']: r.get('parameters', {}) for r in ativa.get('rules', [])}
     for r in esperada['rules']:
         t = r['type']
@@ -65,24 +75,33 @@ def avaliar_administracao(org, admins, equipe_seguranca):
     if len(equipe_seguranca or []) < 2: motivos.append(f'equipe de segurança com {len(equipe_seguranca or [])} membro(s) (mínimo 2)')
     return motivos
 
-def avaliar(ativa, esperada, commit, pedidos, revisoes, org=None, admins=None, equipe_seguranca=None):
-    res, motivos = {}, []
-    e = comparar_protecao(ativa, esperada) if ativa else ['regra de proteção ausente']
+def avaliar(ativa, esperada, commit, pedidos, revisoes, org=None, admins=None, equipe_seguranca=None, estrito=True,
+            parcial=False):
+    res, motivos, avisos = {}, [], []
+    e = comparar_protecao(ativa, esperada, parcial) if ativa else ['regra de proteção ausente']
     res['protecao_do_repositorio'] = not e; motivos += e
     ok = bool(((commit or {}).get('commit') or {}).get('verification', {}).get('verified'))
     res['commits_assinados'] = ok
     if not ok: motivos.append('commit sem assinatura verificada')
+    # O piso de aprovações é o da política declarada, não um número solto aqui: mudar a regra muda o portão junto,
+    # e o contrário (baixar a regra e manter o portão exigindo mais) viraria um vermelho permanente e mentiroso.
+    pr_regra = next((r for r in esperada['rules'] if r['type'] == 'pull_request'), {})
+    exigidas = int((pr_regra.get('parameters') or {}).get('required_approving_review_count', 0))
     pr = next((p for p in (pedidos or []) if p.get('merged_at')), None)
     if not pr: res['revisao_de_duas_pessoas'] = False; motivos.append('commit não veio de pedido de mudança aprovado')
     elif not (pr.get('user') or {}).get('login'):
         res['revisao_de_duas_pessoas'] = False; motivos.append('pedido de mudança sem autor identificável (falha fechada)')
     else:
         ap = aprovacoes_validas(revisoes or [], (pr.get('user') or {}).get('login'))
-        res['revisao_de_duas_pessoas'] = len(ap) >= 2
-        if len(ap) < 2: motivos.append(f'só {len(ap)} aprovação(ões) final(is) de pessoa diferente do autor')
-    m = avaliar_administracao(org, admins, equipe_seguranca)
-    res['administracao_dupla'] = not m; motivos += m
-    return res, motivos
+        res['revisao_de_duas_pessoas'] = len(ap) >= exigidas
+        if len(ap) < exigidas: motivos.append(f'só {len(ap)} aprovação(ões) final(is) de pessoa diferente do autor, a política pede {exigidas}')
+    if estrito:
+        m = avaliar_administracao(org, admins, equipe_seguranca)
+        res['administracao_dupla'] = not m; motivos += m
+    elif org is not None or admins is not None or equipe_seguranca is not None:
+        # Fora do modo estrito a organização é só aviso — mas só faz sentido avisar sobre o que foi lido de fato.
+        avisos += avaliar_administracao(org, admins, equipe_seguranca)
+    return res, motivos, avisos
 
 def api_todas(caminho, token):
     """Todas as páginas (o atacante não esconde uma revisão depois da página 1)."""
@@ -127,7 +146,7 @@ def teste():
     ]
     falhas = 0
     for nome, args, esperado in casos:
-        res, _ = avaliar(*args)
+        res, _, _ = avaliar(*args)
         if all(res.values()) != esperado: print(f'FALHOU: {nome}'); falhas += 1
     # Regras extras (todas as branches, tags): ausente ou afrouxada reprova.
     tags = {'target': 'tag', 'conditions': {'ref_name': {'include': ['~ALL'], 'exclude': []}}, 'rules': [{'type': 'deletion'}, {'type': 'update'}]}
@@ -142,12 +161,13 @@ def teste():
 
 if __name__ == '__main__':
     if '--teste' in sys.argv: teste()
+    estrito = '--estrito' in sys.argv
     repo, sha = os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']
     tok, tok_adm = os.environ['GH_TOKEN'], os.environ.get('PROTECAO_LEITURA', '')
     import glob
     esperada = json.load(open('.github/regras/protecao-principal.json'))
     extras = [json.load(open(f)) for f in sorted(glob.glob('.github/regras/*.json')) if not f.endswith('protecao-principal.json')]
-    ativa, pares = None, []
+    ativa, pares, parcial, avisos = None, [], False, []
     if tok_adm:
         todas = api_todas(f'/repos/{repo}/rulesets', tok_adm)
         def busca(nome):
@@ -156,23 +176,35 @@ if __name__ == '__main__':
         ativa = busca('principal-protegida')
         pares = [(e['name'], busca(e['name']), e) for e in extras]
     else:
-        pares = [(e['name'], None, e) for e in extras]
+        # Sem token de administração: a API pública de branches devolve as regras ativas, os parâmetros de aprovação e
+        # as verificações exigidas. O que ela NÃO devolve é bypass_actors, enforcement e as regras de tag — em vez de
+        # fingir que conferiu, confere o que dá e diz em voz alta o que ficou de fora.
+        ativa = {'target': 'branch', 'rules': api(f'/repos/{repo}/rules/branches/{esperada["conditions"]["ref_name"]["include"][0].split("/")[-1]}', tok)}
+        parcial = True
+        avisos.append('sem PROTECAO_LEITURA: passe livre (bypass_actors), enforcement e regras de tag NÃO conferidos')
     commit = api(f'/repos/{repo}/commits/{sha}', tok)
     pedidos = api(f'/repos/{repo}/commits/{sha}/pulls', tok)
     pr = next((p for p in pedidos if p.get('merged_at')), None)
     revisoes = api_todas(f"/repos/{repo}/pulls/{pr['number']}/reviews", tok) if pr else []
     dono = repo.split('/')[0]
     org = admins = seguranca = None
-    if tok_adm:
-        try:
-            org = api(f'/orgs/{dono}', tok_adm)
-            admins = api_todas(f'/orgs/{dono}/members?role=admin', tok_adm)
-            seguranca = api_todas(f'/orgs/{dono}/teams/seguranca/members', tok_adm)
-        except Exception as e:  # sem acesso = reprovado, nunca "passou"
-            print('REPROVADO: não foi possível ler a administração da organização:', e, file=sys.stderr)
-    res, motivos = avaliar(ativa, esperada, commit, pedidos, revisoes, org, admins, seguranca)
+    if estrito:
+        if not tok_adm:
+            org = admins = seguranca = None
+            print('AVISO: --estrito sem PROTECAO_LEITURA: administração da organização não pôde ser lida', file=sys.stderr)
+        else:
+            try:
+                org = api(f'/orgs/{dono}', tok_adm)
+                admins = api_todas(f'/orgs/{dono}/members?role=admin', tok_adm)
+                seguranca = api_todas(f'/orgs/{dono}/teams/seguranca/members', tok_adm)
+            except Exception as e:  # sem acesso = reprovado, nunca "passou"
+                print('REPROVADO: não foi possível ler a administração da organização:', e, file=sys.stderr)
+    res, motivos, avisos_aval = avaliar(ativa, esperada, commit, pedidos, revisoes, org, admins, seguranca,
+                                        estrito=estrito, parcial=parcial)
+    avisos += avisos_aval
     extra = comparar_todas(pares)
     if extra: res['protecao_do_repositorio'] = False; motivos += extra
     for m in motivos: print('REPROVADO:', m, file=sys.stderr)
+    for a in avisos: print('AVISO:', a, file=sys.stderr)
     print(','.join(f'{k}={int(v)}' for k, v in res.items()))
     sys.exit(0 if all(res.values()) else 1)
