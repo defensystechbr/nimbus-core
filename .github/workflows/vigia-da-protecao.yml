@@ -24,13 +24,17 @@ jobs:
           persist-credentials: false
       - name: Comparar a proteção ativa com a do código
         env:
-          GH_TOKEN: ${{ secrets.PROTECAO_LEITURA }}
+          # Dois tokens com papéis diferentes: o de administração (opcional, lê passe livre e regras de tag) e o do
+          # próprio fluxo, que basta para a API pública de branches. O `gh` recusa rodar sem algum dos dois.
+          PROTECAO_LEITURA: ${{ secrets.PROTECAO_LEITURA }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          if [ -n "${GH_TOKEN:-}" ]; then
-            ID=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id')
+          if [ -n "${PROTECAO_LEITURA:-}" ]; then
+            GH_TOKEN="$PROTECAO_LEITURA" gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id' > id.txt
+            ID=$(cat id.txt)
             test -n "$ID" || { echo "PROTEÇÃO AUSENTE: rode .github/regras/aplicar_protecao.sh"; exit 1; }
-            gh api "repos/$REPO/rulesets/$ID" > ativa.json
+            GH_TOKEN="$PROTECAO_LEITURA" gh api "repos/$REPO/rulesets/$ID" > ativa.json
             MODO=completo
           else
             echo "::warning::PROTECAO_LEITURA ausente: conferindo só o que a API pública devolve (passe livre e regras de tag NÃO conferidos)."
@@ -40,6 +44,9 @@ jobs:
           MODO="$MODO" python3 - <<'PY'
           import json, os, sys
           a = json.load(open('ativa.json')); e = json.load(open('.github/regras/protecao-principal.json'))
+          # A API pública devolve a LISTA de regras; a de administração devolve o objeto da regra. Normalizar aqui
+          # evita o modo público quebrar por formato, que foi exatamente o que aconteceu no primeiro envio.
+          if isinstance(a, list): a = {'rules': a}
           completo = os.environ.get('MODO') == 'completo'
           erros = []
           if completo:
