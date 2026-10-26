@@ -4,7 +4,8 @@
 Quem fizer manutenção no futuro (de dentro ou contratado) não consegue, sem que a verificação reprove:
 apagar testes, defeitos plantados ou regras de varredura; criar rota sem limite de uso; liberar `unsafe`;
 desligar a parada por estouro aritmético; tirar a RLS forçada de uma tabela do banco.
-Baixar um mínimo exige mudar CATRACA.json — arquivo protegido por CODEOWNERS e por aprovação de duas pessoas.
+Baixar um mínimo exige mudar CATRACA.json — arquivo protegido por CODEOWNERS — e é uma edição visível na revisão
+do pedido de mudança, sob o regime de aprovador único declarado em docs/DECISAO_APROVADOR_UNICO.md.
 
 Uso: python3 verificacao/catraca.py [pasta do banco do servidor, opcional]
 """
@@ -254,7 +255,7 @@ if len(sys.argv) > 1:
     ci = os.path.join(kit, '.github', 'workflows', 'nimbus-kit-ci.yml')
     if os.path.isfile(ci):
         t_ = open(ci, encoding='utf-8').read()
-        for trecho in ['  governanca:', '  liberacao:', 'needs: [verificacao, segredos, banco, catraca, procedencia, governanca]', 'environment: liberacao', './verificar.sh --completo', 'git clone --depth 1 https://github.com/RustSec/advisory-db']:
+        for trecho in ['  governanca:', '  liberacao:', 'needs: [verificacao, segredos, banco, catraca, procedencia, governanca]', 'environment: liberacao', 'vars.LIBERACAO_ATIVA', './verificar.sh --completo', 'git clone --depth 1 https://github.com/RustSec/advisory-db']:
             if trecho not in t_: falha(f'CI do kit sem: {trecho.strip()}')
         sent_ = os.path.join(kit, '.github', 'workflows', 'sentinela-diaria.yml')
         if not os.path.isfile(sent_) or 'git clone --depth 1 https://github.com/RustSec/advisory-db' not in open(sent_, encoding='utf-8').read():
@@ -268,7 +269,15 @@ if len(sys.argv) > 1:
         tipos = {r_['type']: r_.get('parameters', {}) for r_ in regra['rules']}
         if regra.get('bypass_actors') or regra.get('enforcement') != 'active': falha('regra da branch com passe livre ou inativa')
         if 'required_signatures' not in tipos: falha('regra da branch sem commit assinado')
-        if tipos.get('pull_request', {}).get('required_approving_review_count', 0) < 2: falha('regra da branch com menos de 2 aprovações')
+        # O piso de aprovações vive em CATRACA.json: baixá-lo é uma edição visível num arquivo protegido, nunca um
+        # número solto no meio do conferidor.
+        if 'pull_request' not in tipos: falha('regra da branch sem pedido de mudança obrigatório')
+        minimo_aprovacoes = int(c.get('aprovacoes_minimas', 2))
+        if tipos.get('pull_request', {}).get('required_approving_review_count', 0) < minimo_aprovacoes:
+            falha(f'regra da branch com menos de {minimo_aprovacoes} aprovação(ões)')
+        exigidas = {x['context'] for x in c.get('verificacoes_obrigatorias', [])}
+        presentes = {x['context'] for x in tipos.get('required_status_checks', {}).get('required_status_checks', [])}
+        if exigidas - presentes: falha(f'CI do kit sem verificação obrigatória: {sorted(exigidas - presentes)}')
         if not os.path.isfile(os.path.join(kit, '.github', 'workflows', 'sentinela-diaria.yml')): falha('sentinela diária ausente')
         ren = os.path.join(kit, 'renovate.json')
         if not os.path.isfile(ren): falha('configuração de atualizações (renovate.json) ausente')

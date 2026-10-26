@@ -28,6 +28,15 @@ def rodar(nome, esperado, env_extra=None, sem=(), args=(), motivo=''):
     t = tempfile.mkdtemp()
     try:
         d = os.path.join(t, 'n'); shutil.copytree(NUCLEO, d, ignore=shutil.ignore_patterns('target', '.git', '__pycache__'))
+        # O contrato é conferido pelo verificar.sh. No layout antigo ele ficava dentro do próprio núcleo; no
+        # repositório ele está na raiz, dois níveis acima. Sem copiá-lo para a cópia de trabalho, o verificar.sh
+        # morria na conferência de citações — antes da etapa que cada caso quer plantar — e os nove casos
+        # reprovavam pelo motivo errado. Achado ao rodar o teste depois da importação, 26/10/2026.
+        for nome_ in ('CONTRATO_DA_PONTE.md',):
+            origem_ = os.path.join(NUCLEO, nome_)
+            if not os.path.isfile(origem_):
+                origem_ = os.path.abspath(os.path.join(NUCLEO, '..', '..', nome_))
+            if os.path.isfile(origem_): shutil.copy2(origem_, os.path.join(d, nome_))
         bin_ = os.path.join(t, 'bin'); os.makedirs(bin_)
         exe(os.path.join(bin_, 'cargo'), CARGO_FALSO.replace('PISO', str(PISO)))
         if 'semgrep' not in sem: exe(os.path.join(bin_, 'semgrep'), '#!/bin/sh\nexit 0\n')

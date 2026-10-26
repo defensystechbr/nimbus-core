@@ -17,4 +17,4 @@ for ARQ in "$DIR"/*.json; do
   fi
   echo "  regra aplicada: $NOME"
 done
-echo "Proteção aplicada em $REPO: 2 aprovações (incluindo dono do código e último envio aprovado por outra pessoa), commits assinados em todas as branches, histórico linear, sem força nem apagamento, 6 verificações obrigatórias, tags imutáveis, ninguém com passe livre."
+echo "Proteção aplicada em $REPO: pedido de mudança obrigatório com aprovador único (0 aprovações exigidas, o merge é a aprovação do dono — docs/DECISAO_APROVADOR_UNICO.md), commits assinados em todas as branches, histórico linear, sem força nem apagamento, verificações obrigatórias (catraca e segredos), tags imutáveis, ninguém com passe livre."

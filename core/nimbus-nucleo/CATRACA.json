@@ -107,6 +107,17 @@
     "protecao_do_usuario"
   ],
   "unsafe_liberados_maximo": 2,
+  "aprovacoes_minimas": 0,
+  "_nota_aprovacoes_minimas": "Aprovador único (decisão do dono, 26/10/2026). A principal continua exigindo pedido de mudança, commit assinado, histórico linear e as verificações obrigatórias; o que saiu foi a exigência de uma SEGUNDA pessoa aprovar. Motivo: o autor não pode aprovar o próprio pedido, e com um só revisor humano o piso 2 travava todo o desenvolvimento. O que isso custa, dito sem enfeite: some a revisão por outra pessoa antes do merge; o selo de liberação passa a depender de uma aprovação só, a do dono, dada no ambiente \"liberacao\". Subir de volta é mudar este número e o JSON da regra juntos.",
+  "verificacoes_obrigatorias": [
+    {
+      "context": "catraca"
+    },
+    {
+      "context": "segredos"
+    }
+  ],
+  "_nota_verificacoes_obrigatorias": "As duas verificações rápidas que barram regressão de proteção e vazamento de segredo. As demais (verificacao, banco, procedencia) continuam rodando em todo envio e na sentinela diária, mas não seguram o merge: 25 minutos de fila por pedido mataria o ritmo de desenvolvimento que o dono pediu para retomar.",
   "limite_maximo_por_minuto": 600,
   "portoes_obrigatorios": [
     "testes",

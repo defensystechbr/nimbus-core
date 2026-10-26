@@ -2,6 +2,14 @@
 
 **Versão 37 · 03/10/2026 · Confidencial · Pré-condição de toda tarefa (T1 em diante)**
 
+> **Atualização de 26/10/2026 — leia antes do resto.** A T0 na parte que dependia do repositório está **concluída**:
+> a proteção da `principal` está ativa e aplicada a partir de `.github/regras/protecao-principal.json`, o código
+> atual entrou por um único pedido de importação submetido a ela, e o CI do kit roda verde. A **revisão por duas
+> pessoas** descrita abaixo foi substituída por **aprovador único, o dono** (`docs/DECISAO_APROVADOR_UNICO.md`),
+> porque o autor não pode aprovar o próprio pedido e não havia segunda pessoa. As seções 2 (passos 2 e 4), 3 e 5
+> descrevem portanto o regime **alvo**, não o vigente. O que continua valendo sem exceção: proteção ativa antes do
+> primeiro commit de trabalho, `./verificar.sh` completo e verde em todo pedido, e nenhum passe livre na branch.
+
 ## 1. Por que existe
 
 Todo o código entregue até aqui (núcleo, verificações, banco, kits e documentos) foi escrito **sem** a proteção da branch ativa: nenhum commit passou pela regra de duas aprovações, pelo commit assinado nem pelos portões de governança. A regra do projeto é que nenhuma mudança entra por uma pessoa só. Por isso o código atual não é tratado como aprovado: ele entra no repositório protegido como **um único pedido de importação**, revisado inteiro por duas pessoas, e só depois disso qualquer tarefa nova começa.
