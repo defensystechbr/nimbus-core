@@ -1,0 +1,14 @@
+# Servidor do NimbusChat
+
+Rust. Guarda só blocos ilegíveis com prazo (`conversa::prazo_na_caixa_do_servidor`), bilhetes de expiração (`expiracao::emitir`), convites só como hash (`convites`), entrega única do envio direto (`direto::Caixa`), lista corporativa (`corporativo::Quadro`). Registros de acesso exigidos pelo Marco Civil (art. 15): data, hora e IP do retransmissor, cifrados, por 6 meses (manual, A0R).
+
+## Regras de segurança do servidor (obrigatórias)
+
+1. **Toda rota passa pelo porteiro** (`autenticacao::Porteiro::autorizar`) antes de qualquer outra coisa. Só existem as rotas de `autenticacao::ROTAS`; o resto responde como inexistente.
+2. **Toda rota que dá para martelar passa pelo limitador** (`limites::Limitador`): cota por janela, castigo que dobra a cada falha, memória com teto.
+3. **O banco é o de `banco/esquema.sql`** (PostgreSQL 16, RLS ligada e forçada). Para cada pedido autorizado, o servidor abre uma transação, chama `SELECT set_config('nimbus.caixa', $1, true)` com o hexadecimal do índice cego da caixa autorizada **como parâmetro** (ou `set_config('nimbus.deposito', 'sim', true)` depois de conferir a ficha) e só então consulta. `SET LOCAL` não aceita parâmetro; montá-lo com texto é proibido. Nunca concatene valor em SQL.
+4. **Rode `banco/teste_do_banco.sh` e `banco/mutacao_do_banco.sh`** a cada mudança de esquema ou de versão do PostgreSQL. Os dois têm de passar (todos os defeitos plantados pegos; hoje 15 de 15).
+5. **Nenhuma senha, nenhuma rota de diagnóstico, nenhum erro detalhado, nenhum conteúdo em registro.** Segredos do servidor só em módulo de hardware ou cofre da nuvem. Detalhes em `docs/NimbusOne_Checklist_de_Seguranca_do_Backend.md`.
+6. **Sentinela na partida e a cada hora:** chamar `sentinela::autoverificar` e rodar `banco/verificar_banco_na_partida.sql`; com qualquer achado, o servidor não atende e envia o relatório (código, lugar, conserto) ao responsável de segurança.
+7. **Metadados mínimos:** o banco guarda cada bloco sob o índice cego (`metadados::ChavesDeIndice::indice`), nunca sob o endereço; as chaves de índice vivem só em memória travada ou em módulo de hardware e são destruídas pelo `destruir_vencidas` a cada hora; registros de acesso só por `metadados::selar_registro`, para a chave jurídica pública fixada no servidor. Memória de troca e despejo de falha desligados na máquina do servidor.
+8. **Respostas e cabeçalhos:** toda resposta usa `autenticacao::resposta_publica` (mesma resposta para toda falha de autorização) e `autenticacao::cabecalhos_da_api` (sem CORS, sem moldura, sem cache); todo pedido passa por `autenticacao::origem_permitida`, com a origem oficial da página do Envio configurada. A chave de assinatura do servidor é a do dia, com o certificado do dia assinado por 2 de 3 raízes offline (`chaves_do_servidor`).

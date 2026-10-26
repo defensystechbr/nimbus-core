@@ -1,0 +1,37 @@
+# Sentinela diária: todo dia, roda a verificação COMPLETA com a base de vulnerabilidades do dia, os portões de
+# governança e a catraca. Se qualquer coisa falhar, o fluxo reprova e notifica os responsáveis — e, como os
+# mesmos portões são exigidos no selo, nada novo é liberado até a correção.
+name: sentinela-diaria
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  sentinela:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust fixado e ferramentas
+        run: |
+          rustup toolchain install 1.91.1 --profile minimal
+          pip install semgrep==1.179.0
+          git clone --depth 1 https://github.com/RustSec/advisory-db /tmp/advisory-db
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16
+      - name: Verificação completa com a base de vulnerabilidades de hoje
+        run: ./verificar.sh --completo
+      - name: Banco (RLS, sentinela do banco e defeitos plantados)
+        run: |
+          sudo chown -R postgres servidor/banco
+          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
+          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
+      - name: Governança do repositório e da organização
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROTECAO_LEITURA: ${{ secrets.PROTECAO_LEITURA }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 verificacao/portoes_de_governanca.py

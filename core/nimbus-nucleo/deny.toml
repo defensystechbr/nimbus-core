@@ -1,0 +1,20 @@
+# NimbusOne — regras para dependências (cargo-deny).
+[advisories]
+# Qualquer vulnerabilidade conhecida reprova a entrega.
+yanked = "deny"
+
+[licenses]
+# Só licenças permissivas e compatíveis com código aberto auditável.
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Unicode-DFS-2016", "Zlib", "CC0-1.0"]
+confidence-threshold = 0.9
+
+[bans]
+# Várias versões da mesma biblioteca aumentam a superfície de ataque: avisar e revisar.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+# Só o repositório oficial de crates; nada de Git de terceiros sem revisão.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

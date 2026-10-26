@@ -1,0 +1,74 @@
+# NimbusOne — exige confirmação humana explícita quando uma IA participou do envio (Rodada 23, 11/10/2026).
+#
+# Por que isto existe: CODEOWNERS já exige 2 aprovações em tudo que toca `src/`, `verificacao/`, etc. — mas
+# nada, até esta rodada, distinguia uma aprovação de uma pessoa de uma aprovação automática, nem exigia
+# qualquer confirmação extra quando o PRÓPRIO código foi escrito (total ou parcialmente) por uma IA. Pedido
+# do dono: "nenhuma IA poderá prejudicar nosso app e servidor". Isto não resolve esse problema por completo
+# (nenhum CI resolve sozinho — ver a resposta honesta sobre garantia de segurança em CONTRATO_DA_PONTE.md) —
+# mas fecha um gap concreto e verificável: hoje, uma IA com acesso de escrita poderia, em tese, assinar seu
+# próprio commit, abrir o PR e aprovar o PR de outra IA, satisfazendo "2 aprovações" sem nenhum humano ter
+# de fato lido a mudança.
+#
+# O que este fluxo faz: procura, nos commits do PR e na descrição do PR, marcas ESTRUTURAIS de autoria por
+# IA (rodapé `Co-Authored-By:` citando uma ferramenta de IA conhecida, ou a frase padrão "Generated with"
+# que esta própria sessão usa). Se achar alguma marca, exige uma etiqueta específica
+# (`${{ env.ETIQUETA_CONFIRMACAO }}`) no PR antes de deixar passar — etiqueta que o GitHub só deixa quem
+# tem permissão de escrita no repositório aplicar (colaborador externo em fork não consegue). Sem marca de
+# IA nenhuma, o fluxo passa direto: não atrapalha o PR comum de um humano.
+#
+# Limite honesto, não escondido: isto confere uma MARCA (rodapé de commit, frase padrão), não o conteúdo —
+# um humano que escreva código malicioso e omita qualquer rodapé de IA passa batido por este fluxo (mas não
+# pelas 2 aprovações humanas de CODEOWNERS, que continuam valendo sempre). E alguém com permissão de escrita
+# pode aplicar a etiqueta sem ter lido nada — a etiqueta é uma ATESTAÇÃO exigida, não uma prova de leitura.
+# Ferramenta de linha auditável, não uma IA julgando outra IA.
+name: revisao-humana-para-ia
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+permissions:
+  contents: read
+  pull-requests: read
+env:
+  ETIQUETA_CONFIRMACAO: confirmado-humano-apos-revisao-ia
+  # Lista mantida à mão, de propósito (nunca adivinhada por uma IA): rodapés `Co-Authored-By` ou nomes de
+  # ferramenta que indicam autoria ou coautoria por IA. Case-insensitive na comparação abaixo.
+  MARCAS_DE_IA: "claude|anthropic|copilot|chatgpt|openai|gpt-|codex|gemini|cursor|devin|🤖|generated with"
+jobs:
+  revisao-humana-para-ia:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Procurar marca de IA nos commits e na descrição do PR
+        id: marca
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMERO_PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          CORPO=$(gh api "repos/$REPO/pulls/$NUMERO_PR" --jq '.body // ""')
+          MENSAGENS=$(gh api "repos/$REPO/pulls/$NUMERO_PR/commits" --jq '.[].commit.message')
+          TUDO="$CORPO
+          $MENSAGENS"
+          if echo "$TUDO" | grep -qiE "$MARCAS_DE_IA"; then
+            echo "achou=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "achou=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Conferir a etiqueta de confirmação humana, só se achou marca de IA
+        if: steps.marca.outputs.achou == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMERO_PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          ETIQUETAS=$(gh api "repos/$REPO/issues/$NUMERO_PR/labels" --jq '.[].name')
+          if echo "$ETIQUETAS" | grep -qxF "$ETIQUETA_CONFIRMACAO"; then
+            echo "Marca de autoria por IA encontrada neste PR, e a etiqueta '$ETIQUETA_CONFIRMACAO' já foi aplicada por alguém com permissão de escrita no repositório. Passa."
+          else
+            echo "::error::Este PR tem marca de autoria (total ou parcial) por IA no commit ou na descrição. Antes de poder passar, alguém com permissão de escrita no repositório precisa revisar a mudança E aplicar a etiqueta '$ETIQUETA_CONFIRMACAO'. Isto é adicional às 2 aprovações já exigidas por CODEOWNERS — não as substitui."
+            exit 1
+          fi
+      - name: Sem marca de IA — passa direto
+        if: steps.marca.outputs.achou == 'false'
+        run: echo "Nenhuma marca de autoria por IA encontrada neste PR. Nada adicional exigido por este fluxo."

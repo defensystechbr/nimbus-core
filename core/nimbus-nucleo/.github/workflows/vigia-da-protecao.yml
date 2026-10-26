@@ -1,0 +1,51 @@
+# Vigia da proteção: confere de hora em hora (e a cada envio) que a proteção da branch principal continua exatamente
+# como no código (.github/regras/protecao-principal.json). Se alguém afrouxar, este fluxo reprova e notifica.
+# Precisa do segredo PROTECAO_LEITURA: token de granularidade fina com permissão SOMENTE de leitura em
+# "Administration" deste repositório (não escreve nada, não lê código).
+name: vigia-da-protecao
+on:
+  # Na hora: qualquer mudança na proteção clássica da branch dispara o vigia na mesma hora.
+  branch_protection_rule:
+  schedule:
+    - cron: "17 * * * *"   # de hora em hora: proteção afrouxada é descoberta em até uma hora
+  push:
+    branches: [ principal ]
+permissions:
+  contents: read
+jobs:
+  vigia:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Comparar a proteção ativa com a do código
+        env:
+          GH_TOKEN: ${{ secrets.PROTECAO_LEITURA }}
+          REPO: ${{ github.repository }}
+        run: |
+          ID=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id')
+          test -n "$ID" || { echo "PROTEÇÃO AUSENTE: rode .github/regras/aplicar_protecao.sh"; exit 1; }
+          gh api "repos/$REPO/rulesets/$ID" > ativa.json
+          python3 - <<'PY'
+          import json, sys
+          a = json.load(open('ativa.json')); e = json.load(open('.github/regras/protecao-principal.json'))
+          erros = []
+          if a.get('enforcement') != 'active': erros.append('regra não está ativa')
+          if a.get('bypass_actors'): erros.append('existe quem possa passar por cima da regra')
+          tipos_a = {r['type']: r.get('parameters', {}) for r in a.get('rules', [])}
+          for r in e['rules']:
+              t = r['type']
+              if t not in tipos_a: erros.append(f'regra ausente: {t}'); continue
+              for k, v in r.get('parameters', {}).items():
+                  if k == 'required_status_checks':
+                      ativos = {c['context'] for c in tipos_a[t].get(k, [])}
+                      faltam = {c['context'] for c in v} - ativos
+                      if faltam: erros.append(f'verificações obrigatórias ausentes: {sorted(faltam)}')
+                  elif k == 'required_approving_review_count':
+                      if tipos_a[t].get(k, 0) < v: erros.append(f'aprovações abaixo de {v}')
+                  elif tipos_a[t].get(k) != v: erros.append(f'{t}.{k} diferente do código')
+          if erros:
+              print('PROTEÇÃO AFROUXADA:'); [print(' -', x) for x in erros]; sys.exit(1)
+          print('Proteção da branch principal conferida: igual ao código.')
+          PY

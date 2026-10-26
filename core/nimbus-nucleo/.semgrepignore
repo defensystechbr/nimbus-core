@@ -1,0 +1,5 @@
+# O exemplo de demonstração imprime conteúdo de propósito, para ensinar o fluxo.
+# Código de aplicativo nunca pode fazer isso: as regras valem para todo o resto.
+examples/
+target/
+nimbus-regras.yml

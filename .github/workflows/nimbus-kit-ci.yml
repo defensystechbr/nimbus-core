@@ -1,0 +1,146 @@
+# Integração contínua do kit: núcleo, documentos, segredos, banco e catraca. Nenhum passo é opcional.
+# Ações fixadas pelo hash do commit (conferido em 02/10/2026).
+name: nimbus-kit-ci
+on:
+  push:
+    branches: [ principal ]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verificacao:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust fixado
+        run: rustup toolchain install 1.91.1 --profile minimal
+      - name: Ferramentas e base de avisos de vulnerabilidade do dia (sem ela o verificar.sh reprova)
+        run: |
+          pip install semgrep==1.179.0
+          git clone --depth 1 https://github.com/RustSec/advisory-db /tmp/advisory-db
+      - name: Verificação COMPLETA do kit (testes, catraca, exemplo, fuzzing profundo, tempo constante, mutação, varredura, dependências, consistência)
+        run: ./verificar.sh --completo
+  segredos:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: gitleaks 8.30.1, com soma de verificação conferida
+        run: |
+          curl -sSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl -sSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
+          grep ' gitleaks_8.30.1_linux_x64.tar.gz$' gitleaks_8.30.1_checksums.txt | sha256sum -c -
+          tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+          ./gitleaks git . --config .gitleaks.toml --redact --no-banner
+  banco:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: PostgreSQL 16
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16
+      - name: Testes de RLS e defeitos plantados no esquema
+        run: |
+          sudo chown -R postgres servidor/banco
+          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/teste_do_banco.sh
+          sudo -u postgres PG_BIN=/usr/lib/postgresql/16/bin sh servidor/banco/mutacao_do_banco.sh
+  catraca:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Nenhuma proteção a menos (núcleo e banco)
+        run: python3 core/nimbus-nucleo/verificacao/catraca.py servidor/banco
+  procedencia:
+    # Certificado de procedência (SLSA, formato in-toto, assinado via Sigstore) do pacote-fonte e do SBOM:
+    # qualquer pessoa confere que o artefato saiu DESTE repositório, DESTE fluxo, DESTE commit.
+    # Atenção: em repositório privado, exige GitHub Enterprise Cloud (plano gratuito, Pro e Team só em público).
+    runs-on: ubuntu-24.04
+    needs: [verificacao, segredos, banco, catraca]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pacote-fonte reproduzível e SBOM
+        run: |
+          git archive --format=tar.gz --prefix=nimbus/ -o nimbus-fonte.tar.gz HEAD
+          sha256sum nimbus-fonte.tar.gz > nimbus-fonte.sha256
+      - name: Gerar e assinar o certificado de procedência
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: nimbus-fonte.tar.gz
+      - name: Como conferir
+        run: |
+          echo "Para conferir: gh attestation verify nimbus-fonte.tar.gz --repo ${{ github.repository }}"
+  governanca:
+    # Proteção do repositório, commit assinado e revisão de duas pessoas, conferidos na API do GitHub.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Teste do próprio conferidor
+        run: python3 verificacao/portoes_de_governanca.py --teste
+      - name: Portões de governança
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROTECAO_LEITURA: ${{ secrets.PROTECAO_LEITURA }}
+        run: python3 verificacao/portoes_de_governanca.py > governanca.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: governanca
+          path: governanca.txt
+  liberacao:
+    # Selo de liberação: só existe se TODOS os portões passaram. A tarefa só roda depois de todas as outras
+    # aprovarem (needs) e dentro do ambiente "liberacao", que exige aprovação humana para rodar.
+    # A segunda assinatura é do responsável de segurança, offline (GUIA_DE_LIBERACAO.md).
+    runs-on: ubuntu-24.04
+    needs: [verificacao, segredos, banco, catraca, procedencia, governanca]
+    if: github.ref == 'refs/heads/principal'
+    environment: liberacao
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust fixado
+        run: rustup toolchain install 1.91.1 --profile minimal
+      - name: Governança aprovada (refeita aqui, não copiada)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROTECAO_LEITURA: ${{ secrets.PROTECAO_LEITURA }}
+        run: python3 verificacao/portoes_de_governanca.py > governanca.txt
+      - name: Montar e assinar o selo (chave do CI)
+        env:
+          SELO_SEMENTE_CI: ${{ secrets.SELO_SEMENTE_CI }}
+        run: |
+          git archive --format=tar.gz --prefix=nimbus/ -o nimbus-fonte.tar.gz HEAD
+          PORTOES="testes=1,mutacao=1,fuzzing=1,tempo_constante=1,catraca=1,varredura=1,segredos=1,dependencias=1,banco_rls=1,banco_mutacao=1,sentinela=1,procedencia=1,consistencia_dos_documentos=1,$(cat governanca.txt)"
+          cd core/nimbus-nucleo
+          cargo run --locked -q --example selo -- montar "${{ github.run_number }}" "${{ github.sha }}" ../../nimbus-fonte.tar.gz "$(date +%s)" "$PORTOES" ../../selo.txt
+          umask 077
+          printf '%s' "$SELO_SEMENTE_CI" > "$RUNNER_TEMP/ci.semente"
+          cargo run --locked -q --example selo -- assinar ../../selo.txt "$RUNNER_TEMP/ci.semente"
+          shred -u "$RUNNER_TEMP/ci.semente"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: selo-de-liberacao-para-segunda-assinatura
+          path: |
+            selo.txt
+            nimbus-fonte.tar.gz

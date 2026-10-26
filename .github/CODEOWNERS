@@ -1,0 +1,10 @@
+# CODEOWNERS do nimbus-core
+#
+# Todo o repositorio exige aprovacao de Wellber ou dilsonlealamaro.
+# O ruleset da branch principal exige 2 aprovacoes e desativa autoaprovacao,
+# entao quem abre o PR nunca aprova o proprio PR.
+#
+# O arquivo original usava equipes @nimbus/seguranca e @nimbus/nucleo, que nao
+# existem na organizacao defensystechbr. Dono inexistente em CODEOWNERS bloqueia
+# todo PR quando require_code_owner_review esta ativo.
+*  @Wellber @dilsonlealamaro

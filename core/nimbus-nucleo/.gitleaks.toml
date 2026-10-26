@@ -1,0 +1,14 @@
+# Varredura de segredos (gitleaks): regras padrão + as do Nimbus. Roda no commit (pre-commit) e no CI.
+title = "Nimbus — nenhum segredo no repositório"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "nimbus-chave-privada-em-hex"
+description = "Bloco longo em hexadecimal atribuído a nome de chave"
+regex = '''(?i)(chave|key|segredo|secret)[a-z_]*\s*[:=]\s*["']?[0-9a-f]{64,}["']?'''
+
+[allowlist]
+description = "Arquivos de regras e exemplos de teste citam padrões, não segredos"
+paths = ['''(^|/)target/''', '''nimbus-regras\.yml''', '''\.gitleaks\.toml''', '''tests/vetores/.*''']

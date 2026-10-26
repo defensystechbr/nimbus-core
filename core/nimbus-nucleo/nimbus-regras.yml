@@ -1,0 +1,357 @@
+# NimbusOne — regras de reprovação automática (prova C7 do Blueprint Mestre v3.0)
+# Comando: semgrep --config nimbus-regras.yml <pasta-do-repositorio>
+# Qualquer ocorrência reprova a entrega até justificativa escrita aprovada por duas pessoas.
+rules:
+  - id: nimbus-ios-fototeca-ou-seletor
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m"]}
+    severity: ERROR
+    message: "Proibido: Fototeca/UIImagePickerController. Use a câmera própria (CM1)."
+    pattern-regex: '\b(UIImagePickerController|PHPhotoLibrary|UIImageWriteToSavedPhotosAlbum|PHAssetCreationRequest)\b'
+
+  - id: nimbus-ios-gravador-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m"]}
+    severity: ERROR
+    message: "Proibido: AVAudioRecorder grava em disco. Use AVAudioEngine em memória (CM1)."
+    pattern-regex: '\bAVAudioRecorder\b'
+
+  - id: nimbus-armazenamento-inseguro
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Revisar: armazenamento local que pode conter conteúdo em claro (R2)."
+    pattern-regex: '\b(UserDefaults|NSUserDefaults|SharedPreferences|NSKeyedArchiver)\b'
+
+  - id: nimbus-area-de-transferencia
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido pôr conteúdo na área de transferência (LIB1: não existe copiar mensagem). Só limpar é permitido (RZ6): clearPrimaryClip() no Android e UIPasteboard.general.items = [] no iOS."
+    pattern-regex: '(\bsetPrimaryClip\b|\bClipData\.new\w*|(?i:clip\w*)\.setText\s*\(|UIPasteboard\.general\.(setItems|setValue|setData|addItems|string|strings|url|urls|image|images|color|colors)\b|UIPasteboard\.general\.items\s*=\s*\[\s*[^\]\s])'
+
+  - id: nimbus-registro-de-conteudo
+    languages: [generic]
+    paths:
+      include: ["*.swift", "*.m", "*.kt", "*.java", "*.rs"]
+      exclude: ["tests/*", "*/tests/*", "examples/*", "*/examples/*", "verificacao/*", "*_test.rs", "*test_*.rs"]
+    severity: WARNING
+    message: "Revisar: log pode vazar conteúdo ou identificador (R1/R2)."
+    pattern-regex: '(\bNSLog\s*\(|\bprint\s*\(|\bos_log\s*\(|\bLog\.[dviwe]\s*\(|\bprintln!\s*\(|\bdbg!\s*\()'
+
+  - id: nimbus-componentes-de-terceiros
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "Podfile", "Package.swift", "*.gradle", "*.kts", "Cargo.toml", "package.json"]}
+    severity: ERROR
+    message: "Proibido: SDK de análise, publicidade ou relatório de falhas de terceiros (R6)."
+    pattern-regex: '(?i)\b(firebase|crashlytics|sentry|mixpanel|amplitude|appsflyer|adjust|segment|bugsnag|datadog|newrelic|facebook-?(core|sdk)|google-?analytics|admob|onesignal)\b'
+
+  - id: nimbus-criptografia-fraca
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.rs", "*.ts", "*.js"]}
+    severity: ERROR
+    message: "Proibido: algoritmo fraco ou modo inseguro (R4)."
+    pattern-regex: '(?i)\b(md5|sha-?1(?![0-9])|des(ede)?(?![a-z])|rc4|ecb|kCCOptionECBMode)\b'
+
+  - id: nimbus-aleatorio-nao-criptografico
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.rs", "*.ts", "*.js"]}
+    severity: ERROR
+    message: "Proibido: gerador aleatório não criptográfico (R4). Use SecRandomCopyBytes / SecureRandom / OsRng / randombytes_buf."
+    pattern-regex: '(\bMath\.random\s*\(|\bjava\.util\.Random\b|\bnew\s+Random\s*\(|\bthread_rng\s*\(|\bsrand\s*\(|\barc4random_uniform\b)'
+
+  - id: nimbus-segredo-no-codigo
+    languages: [generic]
+    severity: ERROR
+    message: "Proibido: chave, senha ou token fixo no código (R4)."
+    pattern-regex: '(?i)(api[_-]?key|secret|password|senha|private[_-]?key|token)\s*[:=]\s*["''][^"'']{8,}["'']'
+
+  - id: nimbus-webview-em-conteudo
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: WARNING
+    message: "Revisar: WebView não pode ser usada em módulos de conteúdo (ARQ nativa)."
+    pattern-regex: '\b(WKWebView|UIWebView|android\.webkit\.WebView)\b'
+
+  - id: nimbus-servidor-registra-ip
+    languages: [generic]
+    paths: {include: ["*.conf", "*.cfg", "*.yaml", "*.yml", "*.toml", "Dockerfile"]}
+    severity: ERROR
+    message: "Proibido: log de acesso com IP no servidor (R1)."
+    pattern-regex: '(?i)(access_log\s+(?!off)\S+|\blog\s+global\b|\$remote_addr|X-Forwarded-For)'
+
+  - id: nimbus-servidor-ssh-em-producao
+    languages: [generic]
+    paths: {include: ["Dockerfile", "*.yaml", "*.yml", "*.tf", "*.sh"]}
+    severity: ERROR
+    message: "Proibido: acesso SSH em produção (R3)."
+    pattern-regex: '(?i)(openssh-server|sshd\b|port\s*[:=]\s*22\b|authorized_keys)'
+
+  - id: nimbus-backup-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m", "*.kt", "*.java", "*.plist", "*.xml"]}
+    severity: ERROR
+    message: "Proibido: conteudo elegivel a backup do sistema (iCloud/Google Backup). Exigido: excluir do backup (R2)."
+    pattern-regex: '(?i)(allowBackup\s*=\s*"true"|NSURLIsExcludedFromBackupKey\s*[:=]\s*false|isExcludedFromBackup\s*=\s*false)'
+
+  - id: nimbus-tela-sem-protecao
+    languages: [generic]
+    paths: {include: ["*.kt", "*.java"]}
+    severity: ERROR
+    message: "Revisar: toda janela de conteudo precisa de FLAG_SECURE (EC2)."
+    pattern-regex: '(clearFlags\s*\(\s*WindowManager\.LayoutParams\.FLAG_SECURE|FLAG_SECURE\s*,\s*false)'
+
+  - id: nimbus-captura-de-audio-permitida
+    languages: [generic]
+    paths: {include: ["*.kt", "*.java", "*.xml"]}
+    severity: ERROR
+    message: "Proibido: permitir captura do audio do app por outros apps (EC3/VC3)."
+    pattern-regex: '(?i)(allowAudioPlaybackCapture\s*=\s*"true"|ALLOW_CAPTURE_BY_ALL|ALLOW_CAPTURE_BY_SYSTEM)'
+
+  - id: nimbus-callkit-registra-chamada
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m"]}
+    severity: ERROR
+    message: "Revisar: CallKit registra a chamada em Recentes. O desenho usa notificacao comum (VZ2/VC1)."
+    pattern-regex: '\b(CXProvider|CXProviderConfiguration|PKPushRegistry)\b'
+
+  - id: nimbus-descoberta-por-telefone
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.rs"]}
+    severity: ERROR
+    message: "Proibido: numero de telefone, SMS ou agenda do sistema como identidade (HY7)."
+    pattern-regex: '(?i)\b(CNContactStore|ContactsContract|SmsManager|MFMessageComposeViewController|phone_?number|msisdn)\b'
+
+  - id: nimbus-localizacao
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.plist", "*.xml"]}
+    severity: ERROR
+    message: "Proibido: acesso a localizacao do usuario (ANO1)."
+    pattern-regex: '(?i)\b(CLLocationManager|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|NSLocationWhenInUseUsageDescription)\b'
+
+  - id: nimbus-identificador-de-aparelho
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: identificador persistente de aparelho ou de publicidade (ANO1)."
+    pattern-regex: '(?i)\b(identifierForVendor|ASIdentifierManager|advertisingIdentifier|ANDROID_ID|getImei|AdvertisingIdClient)\b'
+
+  - id: nimbus-cache-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift", "*.m", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: cache do sistema pode guardar conteudo em disco ou memoria compartilhada (RZ2)."
+    pattern-regex: '(\bURLCache\.shared\b|\bUIImage\s*\(\s*named:|\bNSCache\b|\bImageIO.*kCGImageSourceShouldCache\s*:\s*true|\bgetCacheDir\s*\(|\bgetExternalCacheDir|\bLruCache\b)'
+
+  - id: nimbus-armazenamento-compartilhado
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: gravar em area compartilhada (galeria, Downloads, Arquivos) (RZ1)."
+    pattern-regex: '(\bMediaStore\b|\bgetExternalStorage|\bgetExternalFilesDir|\bUIDocumentPickerViewController\b.*export|\bUISaveVideoAtPathToSavedPhotosAlbum\b)'
+
+  - id: nimbus-teclado-aprende
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.xml"]}
+    severity: WARNING
+    message: "Revisar: o teclado do sistema nao pode aprender o que e digitado (RZ4). iOS: autocorrecao desligada; Android: IME_FLAG_NO_PERSONALIZED_LEARNING."
+    pattern-regex: '(autocorrectionType\s*=\s*\.yes|autocorrectionType\s*=\s*\.default|inputType\s*=\s*"text"(?!.*noPersonalizedLearning))'
+
+  - id: nimbus-sugestoes-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: expor conteudo a Spotlight, Siri, sugestoes ou atalhos do sistema (RZ5)."
+    pattern-regex: '(\bCSSearchableItem\b|\bisEligibleForSearch\s*=\s*true|\bisEligibleForPrediction\s*=\s*true|\bINInteraction\b|\bShortcutManagerCompat\.pushDynamicShortcut)'
+
+  - id: nimbus-telefonia-comum
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.rs", "*.gradle", "*.kts", "Podfile", "Package.swift", "Cargo.toml", "package.json"]}
+    severity: ERROR
+    message: "Proibido: telefonia comum (SIP/PSTN/numero virtual). Decisao TF1 — so chamadas Nimbus para Nimbus."
+    pattern-regex: '(?i)\b(pjsip|pjsua|linphone|baresip|sofia-sip|twilio|vonage|nexmo|plivo|telnyx|bandwidth\.com|sip:[a-z0-9]|SipManager|android\.net\.sip)\b'
+
+  - id: nimbus-notificacao-com-conteudo
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: notificacao local ou remota com texto do usuario. O sistema guarda notificacoes agendadas (rastro). Use texto generico e cancele ao apagar o item (RZ9)."
+    pattern-regex: '(\.(title|subtitle|body)\s*=\s*(?!")[A-Za-z_]|setContentTitle\s*\(\s*(?!")[A-Za-z_]|setContentText\s*\(\s*(?!")[A-Za-z_])'
+
+  - id: nimbus-conteudo-em-mensagem-de-erro
+    languages: [generic]
+    paths: {include: ["*.rs", "*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: conteudo, senha ou segredo em mensagem de erro, registro ou panic — vaza para relatorio de falha (RZ11)."
+    pattern-regex: '(?i)(panic!|format!|println!|eprintln!|fatalError|NSLog|Log\.[dviwe]|print)\s*\(.*\{?\s*\\?\(?(conteudo|texto_claro|segredo|senha|mensagem_aberta|chave_secreta)'
+
+  - id: nimbus-importacao-deixa-copia
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: WARNING
+    message: "Revisar: arquivo importado deixa copia em tmp/Inbox. Cifrar imediatamente e apagar a copia original (RZ10)."
+    pattern-regex: '(asCopy:\s*true|Documents/Inbox|openInputStream\s*\()'
+
+  - id: nimbus-compartilhar-para-fora
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"], exclude: ["*ExportacaoAutorizada*"]}
+    severity: ERROR
+    message: "Proibido: enviar conteudo para outro app pelo sistema. Unica saida: o componente ExportacaoAutorizada, e so quando liberacao::pode(nivel, Uso::LevarParaFora) permitir. Mensagem nunca sai (LIB1)."
+    pattern-regex: '\b(UIActivityViewController|UIDocumentInteractionController|ACTION_SEND|ACTION_SEND_MULTIPLE|createChooser)\b'
+
+  - id: nimbus-biometria-propria
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java", "*.rs", "*.py", "Podfile", "*.gradle", "*.kts", "Cargo.toml", "package.json"]}
+    severity: ERROR
+    message: "Proibido: capturar, processar ou guardar rosto ou voz para identificar alguem. Biometria so a do sistema (Face ID / BiometricPrompt forte), que nunca sai do aparelho (BIO1)."
+    pattern-regex: '(?i)\b(face_recognition|facenet|arcface|insightface|dlib|VNGenerateFaceprint|faceprint|voiceprint|speaker[_-]?verification|speaker[_-]?recognition)\b'
+
+  - id: nimbus-superficies-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: widget, atividade ao vivo, impressao ou arrastar-e-soltar com conteudo — o sistema guarda ou expõe fora do app (EXP9)."
+    pattern-regex: '(\bimport\s+WidgetKit\b|\bimport\s+ActivityKit\b|\bUIPrintInteractionController\b|\bPrintManager\b|\bUIDragInteraction\b|\.onDrag\s*\(|\bstartDragAndDrop\b|\bAppWidgetProvider\b)'
+
+  - id: nimbus-ia-do-sistema
+    languages: [generic]
+    paths: {include: ["*.swift"]}
+    severity: ERROR
+    message: "Proibido: ferramentas de escrita/IA do sistema em campos com conteudo. Exigido writingToolsBehavior = .none (EXP10)."
+    pattern-regex: 'writingToolsBehavior\s*=\s*\.(complete|default|limited)'
+
+  - id: nimbus-rede-fora-da-rota
+    languages: [generic]
+    paths: {include: ["*.swift", "*.kt", "*.java"]}
+    severity: ERROR
+    message: "Proibido: rede ou DNS do sistema. Todo trafego passa pela camada rede do nucleo (duas etapas, Tor ou retransmissor de chamada) — NET1."
+    pattern-regex: '\b(URLSession\.shared|URLSession\s*\(\s*configuration|OkHttpClient|HttpURLConnection|InetAddress\.getByName|getaddrinfo|Alamofire|Retrofit\.Builder|NWConnection)\b'
+
+  - id: nimbus-sem-rede-mesh
+    languages: [generic]
+    paths:
+      include: ["*.swift", "*.m", "*.kt", "*.java", "*.rs"]
+      exclude: ["nimbusdrop/", "NimbusDrop/"]
+    severity: ERROR
+    message: "Proibido: rede mesh ou mensagem fora do servidor (OFF1). Proximidade só no módulo NimbusDrop, com o arquivo lacrado até o servidor liberar a chave (ND2–ND5)."
+    pattern-regex: '\b(MultipeerConnectivity|MCSession|MCNearbyServiceBrowser|MCNearbyServiceAdvertiser|WifiP2pManager|WifiAwareManager|com\.google\.android\.gms\.nearby|Nearby\.getConnectionsClient|BluetoothServerSocket|CBPeripheralManager)\b'
+
+  - id: nimbus-segredo-no-codigo
+    languages: [generic]
+    paths:
+      exclude: ["nimbus-regras.yml", "*.md", "tests/", "verificacao/"]
+    severity: ERROR
+    message: "Proibido: segredo ou chave escrito no código ou em arquivo do repositório. Segredos só no cofre (módulo de hardware ou cofre da nuvem), nunca em arquivo, variável de ambiente de produção ou imagem."
+    pattern-regex: '(AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|sk-[A-Za-z0-9_\-]{20,}|sk-ant-[A-Za-z0-9_\-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35}|-----BEGIN (RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----|(?i)(api[_-]?key|secret|token|senha|password|passwd)\s*[:=]\s*["''][^"'']{8,}["''])'
+
+  - id: nimbus-ia-externa
+    languages: [generic]
+    paths:
+      include: ["*.rs", "*.swift", "*.kt", "*.java", "*.ts", "*.js", "*.py", "*.toml", "*.gradle", "*.kts", "Package.swift"]
+      exclude: ["nimbus-regras.yml"]
+    severity: ERROR
+    message: "Proibido: chamada a serviço de IA de terceiros no app ou no servidor (sem IA embarcada; nenhum dado de usuário vai para modelo externo). Exceção só com decisão do fundador e revisão de segurança."
+    pattern-regex: '(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|api\.mistral\.ai|api\.cohere\.(ai|com)|api-inference\.huggingface\.co|bedrock-runtime|aiplatform\.googleapis\.com|openai\.azure\.com|\bopenai\b\s*=|\banthropic\b\s*=|async-openai|langchain)'
+
+  - id: nimbus-senha-em-texto
+    languages: [generic]
+    paths:
+      include: ["*.sql", "*.rs", "*.swift", "*.kt", "*.ts", "*.js", "*.py"]
+      exclude: ["nimbus-regras.yml"]
+    severity: ERROR
+    message: "Proibido: senha guardada como texto (coluna, campo ou variável persistida). O servidor não guarda senha; no aparelho, só resumo Argon2id (senha::derivar)."
+    pattern-regex: '(?i)(\b(senha|password|passwd|pwd)\s+(text|varchar|char|bytea|string)\b|\b(senha|password)_?(em_texto|plain|plaintext|clara)\b)'
+
+  - id: nimbus-ambiente-fora-do-cofre
+    languages: [generic]
+    paths:
+      include: ["*.rs", "*.swift", "*.kt", "*.java", "*.ts", "*.js", "*.py"]
+      exclude: ["nimbus-regras.yml", "segredos/", "examples/", "tests/", "verificacao/"]
+    severity: ERROR
+    message: "Proibido: ler variável de ambiente fora do módulo de segredos do servidor. Segredo de produção vem do cofre por identidade de carga de trabalho, nunca de .env nem de variável de ambiente."
+    pattern-regex: '(std::env::var|env::var\(|env!\(|option_env!\(|process\.env|System\.getenv|ProcessInfo\.processInfo\.environment|os\.environ|os\.getenv|dotenv)'
+
+  - id: nimbus-sql-montado-com-texto
+    languages: [generic]
+    paths:
+      include: ["*.rs", "*.ts", "*.js", "*.py", "*.kt"]
+      exclude: ["nimbus-regras.yml"]
+    severity: ERROR
+    message: "Proibido: SQL montado com texto vindo de fora (injeção). Use sempre parâmetros ($1, $2) e deixe a RLS do banco fazer a segunda barreira."
+    pattern-regex: '(?i)(format!\s*\(\s*"[^"]*\b(select|insert|update|delete)\b[^"]*\{|"(select|insert|update|delete)\b[^"]*"\s*\+|f"[^"]*\b(select|insert|update|delete)\b[^"]*\{)'
+
+  - id: nimbus-unsafe-fora-da-memoria
+    languages: [generic]
+    paths:
+      include: ["*.rs"]
+      exclude: ["src/memoria.rs"]
+    severity: ERROR
+    message: "Proibido: código inseguro (unsafe) ou liberação da proibição (allow/expect/warn de unsafe_code, inclusive #![...] e cfg_attr) fora de src/memoria.rs. Segunda camada da catraca: a memória segura do Rust é uma das garantias do núcleo."
+    pattern-regex: '(#!?\[[^\]]*\b(allow|expect|warn)\s*\([^)]*\bunsafe_code\b|\bunsafe\s*(\{|fn\b|impl\b|trait\b|extern\b))'
+
+  - id: nimbus-sem-eval-nas-ferramentas
+    languages: [python]
+    severity: ERROR
+    message: "Proibido eval/exec/compile nas ferramentas: arquivos do projeto (protótipo, documentos) são dados, nunca código. Um eval sobre o protótipo permitia executar qualquer comando no CI (corrigido em 04/10/2026)."
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+
+  - id: nimbus-nativo-sem-log
+    languages: [generic]
+    paths:
+      include: ["*.kt", "*.swift"]
+    severity: ERROR
+    message: "Proibido registro em log na camada nativa (Log.d/v/i/w/e, println, print, NSLog, os_log, Logger): log é resíduo no aparelho (RSD9)."
+    pattern-regex: '(\bLog\.[dviwe]\s*\(|\bprintln\s*\(|(^|[^.\w])print\s*\(|\bNSLog\s*\(|\bos_log\s*\(|\bLogger\s*\()'
+
+  - id: nimbus-nativo-sem-tirar-protecao
+    languages: [generic]
+    paths:
+      include: ["*.kt", "*.swift", "*.xml"]
+    severity: ERROR
+    message: "Proibido tirar a proteção da janela ou ligar backup: clearFlags(FLAG_SECURE), setRecentsScreenshotEnabled(true), allowBackup=\"true\" (RSD3, RSD5)."
+    pattern-regex: '(clearFlags\s*\([^)]*FLAG_SECURE|setRecentsScreenshotEnabled\s*\(\s*true|allowBackup\s*=\s*"true")'
+
+  - id: nimbus-sem-link-web
+    languages: [generic]
+    paths:
+      include: ["*.rs", "*.py", "*.kt", "*.swift", "*.sql", "*.toml", "*.yml"]
+      exclude: ["nimbus-regras.yml", "catraca.py", "testar_catraca.py"]
+    severity: ERROR
+    message: "Proibido: link, página ou cliente web (decisão do dono em 06/10/2026: somente app; quem recebe instala o app; não existe plataforma web). Uma página servida a cada acesso permitiria ao servidor entregar código que copia a chave (caso Privnote)."
+    pattern-regex: '(/v1/envio\b|\bmontar_link\b|\bChaveDoLink\b|Clear-Site-Data|history\.replaceState|[Aa]ccess-[Cc]ontrol-[Aa]llow-[Oo]rigin|Plataforma::Web\b|\bmanifest\.webmanifest\b|\bserviceWorker\b)'
+
+  - id: nimbus-nativo-sem-webview
+    languages: [generic]
+    paths:
+      include: ["*.kt", "*.swift", "*.xml"]
+    severity: ERROR
+    message: "Proibido navegador embutido no app (WebView, WKWebView, SFSafariViewController, Custom Tabs): conteúdo web dentro do Nimbus seria código de fora rodando com acesso à tela."
+    pattern-regex: '\b(WebView|WKWebView|SFSafariViewController|CustomTabsIntent|ASWebAuthenticationSession)\b'
+
+  - id: nimbus-nativo-sem-compartilhar
+    languages: [generic]
+    paths:
+      include: ["*.kt", "*.swift", "*.xml"]
+    severity: ERROR
+    message: "Proibido compartilhar, exportar ou encaminhar conteúdo para fora do app (folha de compartilhamento, Intent de envio, arrastar, abrir em outro app). O NimbusChat não deixa nada sair, nem para denunciar."
+    pattern-regex: '\b(UIActivityViewController|ShareLink|UIDocumentInteractionController|UIDragInteraction|NSItemProvider|ACTION_SEND(_MULTIPLE)?|createChooser|FileProvider|startDragAndDrop|UIPrintInteractionController|PrintManager)\b'
+
+  - id: nimbus-sem-sinais-de-presenca
+    languages: [generic]
+    paths:
+      include: ["*.rs", "*.kt", "*.swift"]
+      exclude: ["nimbus-regras.yml"]
+    severity: ERROR
+    message: "Proibido sinal de presença saindo do aparelho: digitando, entregue, online, visto por último (decisão do dono em 06/10/2026). O único aviso permitido é 'visualizada', opcional e recíproco."
+    pattern-regex: '(?i)\b(aviso_de_digitando|aviso_de_entrega|digitando\(|typing_?indicator|is_?typing|visto_por_ultimo|last_?seen|online_?status|presenca_online)\b'
+
+  - id: nimbus-nativo-sem-disco-em-claro
+    languages: [generic]
+    paths:
+      include: ["*.kt", "*.swift", "*.xml"]
+    severity: ERROR
+    message: "Proibido gravar fora do contêiner cifrado do núcleo: cache HTTP, sessão de rede padrão (use URLSessionConfiguration.ephemeral), gravador que escreve arquivo (grave na memória), preferências em texto (UserDefaults, SharedPreferences), bancos em claro (SQLite, Core Data, Realm, Room), pastas temporárias e de cache, galeria de fotos e armazenamento externo. Tudo o que fica no aparelho passa pelo núcleo cifrado; o resto só existe na memória."
+    pattern-regex: '\b(URLCache|URLSession\.shared|URLSessionConfiguration\.default|AVAudioRecorder|MediaRecorder|UserDefaults|SharedPreferences|getSharedPreferences|NSKeyedArchiver|sqlite3_open|SQLiteDatabase|SQLiteOpenHelper|NSPersistentContainer|CoreData|RealmSwift|Realm\(|RoomDatabase|NSTemporaryDirectory|temporaryDirectory|cachesDirectory|getCacheDir|cacheDir|getExternalFilesDir|getExternalStorage|PHPhotoLibrary|UIImageWriteToSavedPhotosAlbum|MediaStore|okhttp3\.Cache)\b'

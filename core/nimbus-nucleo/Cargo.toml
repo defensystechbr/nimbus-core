@@ -1,0 +1,51 @@
+[package]
+name = "nimbus-nucleo"
+version = "0.2.0"
+edition = "2021"
+# Rust 1.91: exigido pela assinatura pós-quântica ML-DSA (FIPS 204).
+rust-version = "1.91"
+description = "NimbusOne — nucleo de seguranca: envelope pos-quantico, expiracao, integridade do aparelho, sessoes, escudo de conversa, voz, coacao e trafego de cobertura. Prototipo para auditoria."
+license = "Apache-2.0"
+
+[lib]
+# Não há exemplos executáveis nos comentários; os testes vivem em src/ (unidade) e tests/ (robustez).
+doctest = false
+
+[dependencies]
+ml-kem = { version = "=0.2.1", features = ["zeroize"] }
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
+ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
+chacha20poly1305 = "0.10"
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+zeroize = "=1.8.1"
+rand_core = { version = "0.6", features = ["getrandom"] }
+subtle = "2"
+base64 = "0.22"
+ml-dsa = { version = "=0.1.1", features = ["zeroize"] }
+argon2 = { version = "0.5", features = ["zeroize"] }
+blind-rsa-signatures = { version = "0.18.0", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Em produção: interromper sem desenrolar a pilha, para nenhum estado sobreviver a uma falha.
+# Mensagens de erro nunca levam conteúdo (regra nimbus-conteudo-em-mensagem-de-erro).
+# Dependências otimizadas também nos testes: criptografia pós-quântica e Argon2id ficam rápidas,
+# e o código do núcleo continua compilado com todas as checagens.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+panic = "abort"
+# Estouro aritmético interrompe em vez de dar a volta em silêncio: num app de segurança, falhar fechado é
+# melhor que seguir com um tamanho ou um prazo errado (revisão v37, quarta rodada).
+overflow-checks = true
+
+# Perfil das provas pesadas (fuzzing e tempo constante): otimizado como o release, mas com verificação de
+# estouro aritmético e asserções de depuração ligadas — pega mais defeitos e continua rápido.
+[profile.verificacao]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true

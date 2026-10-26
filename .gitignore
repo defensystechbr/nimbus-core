@@ -1,0 +1,34 @@
+# Nimbus — nada de segredo, chave ou artefato no repositório.
+# Sem barra inicial: pega target/ em qualquer nivel (core/nimbus-nucleo/target tambem).
+# O padrao anterior (/target/) so cobria a raiz e deixava 643 MB de build entrarem no repositorio.
+target/
+*.original
+__pycache__/
+.claude/
+# Segredos: NUNCA versionar. Em produção não existe .env: segredos vêm do cofre (módulo de hardware ou
+# cofre da nuvem) por identidade de carga de trabalho. .env só em máquina de desenvolvimento, com valores
+# de teste, e mesmo assim fora do git.
+.env
+.env.*
+!.env.exemplo
+secrets/
+segredos_locais/
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.der
+*.crt
+id_rsa*
+id_ed25519*
+.netrc
+.npmrc
+.pypirc
+credentials.json
+service-account*.json
+*.semente
+selo.txt

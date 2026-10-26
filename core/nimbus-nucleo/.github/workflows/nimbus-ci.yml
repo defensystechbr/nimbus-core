@@ -1,0 +1,100 @@
+# NimbusOne — integração contínua do núcleo de segurança.
+# Toda alteração só entra se TODOS os passos passarem. Nenhum passo pode ser pulado ou marcado como opcional.
+# Ações fixadas pelo hash do commit (conferido em 02/10/2026), não pela versão: uma tag pode ser movida.
+name: nimbus-ci
+on:
+  push:
+    branches: [ principal ]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  nucleo:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust fixado
+        run: rustup toolchain install 1.91.1 --profile minimal --component clippy
+      - name: Clippy (todos os alvos, nenhum aviso tolerado)
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Catraca (nenhuma proteção a menos que antes)
+        run: python3 verificacao/catraca.py
+      - name: Conferidores conferidos (defeitos plantados na catraca, no auditor de dependencias e no verificar.sh)
+        run: python3 verificacao/testar_catraca.py && python3 verificacao/testar_auditoria.py && python3 verificacao/testar_verificar.py && python3 verificacao/mutantes.py --conferir
+      - name: Testes de unidade e de robustez (com as versões travadas do Cargo.lock)
+        run: cargo test --locked
+      - name: Fuzzing dos leitores (200 mil entradas por alvo, verificacao de estouro ligada)
+        run: FUZZ_RODADAS=200000 cargo test --profile verificacao --test fuzzing --locked -- --ignored
+      - name: Compilação rigorosa, sem nenhum aviso
+        run: RUSTFLAGS="-D warnings -W unused-results -W missing-debug-implementations -W rust-2018-idioms" cargo build --lib --examples --locked
+      - name: Exemplo de ponta a ponta
+        run: cargo run --example fluxo_completo --locked
+      - name: Vulnerabilidades conhecidas nas dependências
+        run: cargo install cargo-audit --version 0.22.2 --locked && cargo audit
+      - name: Licenças e origem das dependências
+        run: cargo install cargo-deny --version 0.20.2 --locked && cargo deny check
+      - name: Varredura de código proibido (deve dar zero ocorrências)
+        run: pip install semgrep==1.179.0 && semgrep --config nimbus-regras.yml --error --metrics=off .
+      - name: Inventário de componentes (SBOM)
+        run: cargo install cargo-cyclonedx --version 0.5.9 --locked && cargo cyclonedx --format json
+  segredos:
+    # Nenhum segredo no repositório, em nenhum commit da história.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Baixar o código (história completa)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: gitleaks 8.30.1, com soma de verificação conferida
+        run: |
+          curl -sSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl -sSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
+          grep ' gitleaks_8.30.1_linux_x64.tar.gz$' gitleaks_8.30.1_checksums.txt | sha256sum -c -
+          tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+          ./gitleaks git . --config .gitleaks.toml --redact --no-banner
+  mutacao:
+    # Teste por mutação: planta defeitos em pontos críticos e exige que TODOS sejam pegos pelos testes.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust fixado
+        run: rustup toolchain install 1.91.1 --profile minimal
+      - name: Mutação (288 defeitos plantados; todos precisam ser pegos)
+        run: python3 verificacao/mutantes.py
+      - name: Tempo constante (PIN real, de coação e errado)
+        run: cargo test --profile verificacao --test timing --locked -- --ignored --nocapture
+      - name: Fuzzing profundo (2 milhões de entradas por alvo)
+        run: FUZZ_RODADAS=3000000 cargo test --profile verificacao --test fuzzing --locked -- --ignored
+  procedencia:
+    # Certificado de procedência (SLSA, formato in-toto, assinado via Sigstore) do pacote-fonte e do SBOM:
+    # qualquer pessoa confere que o artefato saiu DESTE repositório, DESTE fluxo, DESTE commit.
+    # Atenção: em repositório privado, exige GitHub Enterprise Cloud (plano gratuito, Pro e Team só em público).
+    runs-on: ubuntu-24.04
+    needs: [nucleo, segredos]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pacote-fonte reproduzível e SBOM
+        run: |
+          git archive --format=tar.gz --prefix=nimbus/ -o nimbus-fonte.tar.gz HEAD
+          sha256sum nimbus-fonte.tar.gz > nimbus-fonte.sha256
+      - name: Gerar e assinar o certificado de procedência
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: nimbus-fonte.tar.gz
+      - name: Como conferir
+        run: |
+          echo "Para conferir: gh attestation verify nimbus-fonte.tar.gz --repo ${{ github.repository }}"

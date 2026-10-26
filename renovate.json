@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Atualizações de dependências do Nimbus: nunca automáticas, sempre com espera e revisão de segurança de duas pessoas.",
+  "extends": [
+    "config:recommended"
+  ],
+  "automerge": false,
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "pinDigests": true,
+  "rangeStrategy": "pin",
+  "dependencyDashboard": true,
+  "labels": [
+    "dependencias",
+    "revisao-de-seguranca"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "seguranca-urgente"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Bibliotecas de criptografia: 30 dias de espera e revisão do responsável de segurança",
+      "matchPackageNames": [
+        "ml-kem",
+        "ml-dsa",
+        "x25519-dalek",
+        "ed25519-dalek",
+        "chacha20poly1305",
+        "aes-gcm",
+        "argon2",
+        "hkdf",
+        "sha2",
+        "zeroize",
+        "subtle",
+        "rand_core"
+      ],
+      "minimumReleaseAge": "30 days",
+      "labels": [
+        "criptografia",
+        "revisao-de-seguranca"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# Ganchos locais: rodam antes de cada commit. Instale com: pip install pre-commit && pre-commit install
+# Versões fixadas pelo hash do commit (conferidas em 02/10/2026).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/semgrep/semgrep
+    rev: fed96460fd67f504ea59342eba8f921f4d74fe17  # v1.179.0 (commit; conferido no repositório oficial em 05/10/2026)
+    hooks:
+      - id: semgrep
+        args: ["--config", "nimbus-regras.yml", "--error", "--metrics=off"]

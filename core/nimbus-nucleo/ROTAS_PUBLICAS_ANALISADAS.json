@@ -1,0 +1,41 @@
+{
+  "_leia": "Cada rota sem prova de titular (pública ou só com ficha) precisa de análise aqui. A catraca reprova rota nova sem análise.",
+  "rotas": {
+    "/v1/hora": {
+      "devolve": "Hora atual do servidor assinada junto com o desafio de 32 bytes enviado pelo próprio pedido",
+      "expoe": "A hora do servidor (pública por natureza)",
+      "riscos": "Repetição de resposta antiga; servidor falso",
+      "defesa": "Resposta presa ao desafio de uso único e assinada; aparelho recusa hora que volta no tempo (expiracao::conferir_hora); 120 por minuto por origem"
+    },
+    "/v1/prechave": {
+      "devolve": "Chave de recebimento pública de uma caixa, assinada pela identidade",
+      "expoe": "Que aquele endereço de 32 bytes existe e a impressão digital da identidade de quem o publicou — só para quem já conhece o endereço (contatos)",
+      "riscos": "Enumeração de endereços; troca de chave pelo servidor",
+      "defesa": "Endereço aleatório de 256 bits (adivinhar é inviável); assinatura da identidade conferida por quem envia (prechaves::conferir); 120 por minuto por origem"
+    },
+    "/v1/convite/resgatar": {
+      "devolve": "Se o código de convite de uso único existe, o endereço exclusivo da relação; depois disso o código queima",
+      "expoe": "Nada sem o código; com o código, só o endereço daquela relação",
+      "riscos": "Adivinhar códigos; interceptar o código antes do dono",
+      "defesa": "Código de 256 bits; servidor guarda só o resumo; uso único; prazo de 10 minutos; palavras de confirmação obrigatórias (EO1); 10 por minuto por origem e castigo que dobra"
+    },
+    "/v1/caixa/criar": {
+      "devolve": "Confirmação de criação de uma caixa com a chave pública informada",
+      "expoe": "Nada",
+      "riscos": "Criação em massa (consumo de recurso)",
+      "defesa": "Exige ficha anônima de licença; 10 por minuto por origem; RLS do banco só aceita com ficha conferida"
+    },
+    "/v1/caixa/depositar": {
+      "devolve": "Confirmação de depósito de bloco cifrado numa caixa existente",
+      "expoe": "Nada (não diz se a caixa tem outros blocos)",
+      "riscos": "Encher caixas alheias (spam cifrado); consumo de recurso",
+      "defesa": "Exige ficha anônima de licença; tamanho máximo; prazo de 48 h no banco; 120 por minuto por origem; o destinatário só abre o que vier assinado por contato (DIR8)"
+    },
+    "/v1/envio/abrir": {
+      "devolve": "O bloco cifrado de um link do Nimbus Envio, uma única vez; depois o link queima",
+      "expoe": "Nada sem o identificador de 256 bits do link; a chave fica depois do # e nunca chega ao servidor",
+      "riscos": "Adivinhar identificadores; página falsa pedindo o bloco; pedido vindo de outra origem",
+      "defesa": "Identificador de 256 bits; entrega única; prazo de até 48 h; só a origem oficial da página do Envio (origem_permitida); 30 por minuto por origem e castigo que dobra"
+    }
+  }
+}

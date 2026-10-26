@@ -1,0 +1,12 @@
+# Arquivos de segurança exigem revisão do responsável de segurança E de mais uma pessoa
+# (proteção de branch: 2 aprovações obrigatórias, incluindo administradores).
+/CATRACA.json                 @nimbus/seguranca
+/nimbus-regras.yml            @nimbus/seguranca
+/verificacao/                 @nimbus/seguranca
+/src/                         @nimbus/seguranca @nimbus/nucleo
+/Cargo.toml                   @nimbus/seguranca
+/Cargo.lock                   @nimbus/seguranca
+/deny.toml                    @nimbus/seguranca
+/.github/                     @nimbus/seguranca
+/.gitleaks.toml               @nimbus/seguranca
+/renovate.json                @nimbus/seguranca
