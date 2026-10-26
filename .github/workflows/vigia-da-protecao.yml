@@ -31,10 +31,10 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           if [ -n "${PROTECAO_LEITURA:-}" ]; then
-            GH_TOKEN="$PROTECAO_LEITURA" gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id' > id.txt
+            GH_TOKEN=$PROTECAO_LEITURA gh api "repos/$REPO/rulesets" --jq '.[] | select(.name=="principal-protegida") | .id' > id.txt
             ID=$(cat id.txt)
             test -n "$ID" || { echo "PROTEÇÃO AUSENTE: rode .github/regras/aplicar_protecao.sh"; exit 1; }
-            GH_TOKEN="$PROTECAO_LEITURA" gh api "repos/$REPO/rulesets/$ID" > ativa.json
+            GH_TOKEN=$PROTECAO_LEITURA gh api "repos/$REPO/rulesets/$ID" > ativa.json
             MODO=completo
           else
             echo "::warning::PROTECAO_LEITURA ausente: conferindo só o que a API pública devolve (passe livre e regras de tag NÃO conferidos)."
