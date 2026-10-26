@@ -35,9 +35,11 @@ precisa python3 "python3 não encontrado"
 precisa semgrep "semgrep não encontrado: a varredura é obrigatória (pip install semgrep)"
 precisa git "git não encontrado: a auditoria de dependências precisa saber a data da base de avisos"
 if command -v rustup >/dev/null 2>&1; then (cd "$NUCLEO" && rustup toolchain install >/dev/null 2>&1) || true; fi
+# O rust-toolchain.toml mora dentro do núcleo: a versão só é a fixada quando o cwd é o núcleo.
+# Conferir antes do cd lia o Rust default do runner (1.99) e reprovava sem motivo.
+cd "$NUCLEO"
 VERSAO="$("$CARGO" --version)"; echo "  $VERSAO"
 case "$VERSAO" in *" 1.91."*) ;; *) falha "versão do Rust diferente da fixada (1.91.x): $VERSAO" ;; esac
-cd "$NUCLEO"
 # Uma mutação interrompida pode deixar o código com um defeito plantado. Restaura antes de qualquer teste.
 for ORIGINAL in src/*.original; do
   [ -f "$ORIGINAL" ] || continue
