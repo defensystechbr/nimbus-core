@@ -9,7 +9,38 @@ Nunca devolve 0 sem ter auditado tudo.
 Uso: python3 verificacao/auditar_dependencias.py [caminho/para/advisory-db]
 Variáveis: ADVISORY_DB (caminho da base), IDADE_MAXIMA_DA_BASE_DIAS (padrão 7).
 """
-import datetime, glob, os, re, subprocess, sys, tomllib
+import datetime, glob, json, os, re, subprocess, sys, tomllib
+
+def riscos_aceitos(raiz):
+    """Riscos aceitos com prazo, de verificacao/riscos_aceitos.json.
+
+    Regras duras, para a exceção não virar porta:
+      - casa por (crate, aviso) EXATO, nunca por crate nem por prefixo;
+      - só vale para aviso SEM correção publicada: se houver versão em `patched`, a exceção é ignorada;
+      - a justificativa tem de continuar citada no código apontado por `referencia`, senão não vale;
+      - vencido `revisar_em`, não vale.
+    """
+    p = os.path.join(raiz, 'verificacao', 'riscos_aceitos.json')
+    if not os.path.isfile(p): return {}
+    dados = json.load(open(p, encoding='utf-8'))
+    hoje = datetime.date.today()
+    aceitos = {}
+    for e in dados.get('aceitos', []):
+        for campo in ('crate', 'aviso', 'motivo', 'referencia', 'revisar_em'):
+            if not e.get(campo):
+                print(f'✘ riscos_aceitos.json: entrada sem "{campo}": {e}'); sys.exit(2)
+        try: vence = datetime.date.fromisoformat(e['revisar_em'])
+        except ValueError:
+            print(f'✘ riscos_aceitos.json: revisar_em inválido em {e["crate"]} {e["aviso"]}: {e["revisar_em"]}'); sys.exit(2)
+        if hoje >= vence:
+            print(f'  • risco aceito VENCIDO em {e["revisar_em"]}: {e["crate"]} {e["aviso"]} volta a reprovar')
+            continue
+        ref = os.path.join(raiz, e['referencia'].split(':')[0])
+        if not os.path.isfile(ref) or e['aviso'] not in open(ref, encoding='utf-8').read():
+            print(f'  • risco aceito sem justificativa no código ({e["referencia"]} não cita {e["aviso"]}): não vale')
+            continue
+        aceitos[(e['crate'], e['aviso'])] = e
+    return aceitos
 
 def versao(v):
     """Versão semver comparável: (maior, menor, correção, é_final, pré-lançamento)."""
@@ -72,7 +103,8 @@ def main():
     entradas = re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"', open(lock).read())
     if not entradas:
         print('✘ auditoria NÃO rodou: Cargo.lock sem pacotes.'); return 2
-    vulneraveis, avisos_lidos = [], 0
+    aceitos = riscos_aceitos(raiz)
+    vulneraveis, aceitas_lidas, avisos_lidos = [], [], 0
     for crate, ver in entradas:
         for md in sorted(glob.glob(os.path.join(db, 'crates', crate, '*.md'))):
             dados = frente_toml(open(md, encoding='utf-8').read())
@@ -80,8 +112,19 @@ def main():
             avisos_lidos += 1
             if 'withdrawn' in adv: continue          # só o campo de verdade, nunca a palavra no texto
             seguro = any(satisfaz(ver, f) for f in vers.get('patched', []) + vers.get('unaffected', []))
-            if not seguro:
-                vulneraveis.append((crate, ver, adv.get('id', '?'), adv.get('informational', 'vulnerabilidade')))
+            if seguro: continue
+            ident = adv.get('id', '?')
+            risco = aceitos.get((crate, ident))
+            if risco and vers.get('patched'):
+                # Há correção publicada: aceitar seria escolher a vulnerabilidade em vez do upgrade.
+                print(f'  • risco aceito para {crate} {ident} IGNORADO: existe versão corrigida ({vers["patched"]}); atualize')
+                risco = None
+            if risco:
+                aceitas_lidas.append((crate, ver, ident, risco['referencia'], risco['revisar_em']))
+            else:
+                vulneraveis.append((crate, ver, ident, adv.get('informational', 'vulnerabilidade')))
+    for c, v, i, ref, vence in aceitas_lidas:
+        print(f'  ↷ risco aceito: {c} {v} — {i} (justificativa em {ref}; revisar até {vence})')
     if vulneraveis:
         print('✘ Dependências em versão vulnerável:')
         for c, v, i, t in vulneraveis: print(f'  {c} {v} — {i} ({t})')

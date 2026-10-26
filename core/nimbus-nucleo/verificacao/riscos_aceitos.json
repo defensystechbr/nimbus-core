@@ -1,0 +1,12 @@
+{
+  "_leia": "Riscos ACEITOS, um por linha, com prazo. Só valem para aviso sem correção publicada (patched vazio): se existir versão corrigida, o auditor IGNORA a exceção e reprova, porque atualizar é a saída. A exceção também deixa de valer se o arquivo citado em 'referencia' não citar mais o identificador do aviso — a justificativa tem de continuar no código, não só aqui. Vencido 'revisar_em', o aviso volta a reprovar. Cada entrada é uma decisão de segurança: mexer neste arquivo é mexer na postura do produto.",
+  "aceitos": [
+    {
+      "crate": "rsa",
+      "aviso": "RUSTSEC-2023-0071",
+      "motivo": "Marvin attack (canal lateral de tempo). Upstream sem correção: patched = [] no advisório. O núcleo usa RSA só em assinatura CEGA para ficha de cobrança, e blind_sign passa Some(rng) (caminho com blinding); a análise e os três limites honestos estão em src/cobranca.rs. Aceito em 26/10/2026 com revisão mensal, porque a alternativa seria trocar a primitiva de cobrança, e isso é decisão de produto, não de manutenção.",
+      "referencia": "src/cobranca.rs",
+      "revisar_em": "2026-11-26"
+    }
+  ]
+}
