@@ -9,14 +9,19 @@
 #                                 bem mais numa de 1 núcleo.
 #      ./verificar.sh --completo  o mesmo (mantido por compatibilidade com o CI e com o sentinela diário).
 #      ./verificar.sh --amostra   tudo do completo, mas a mutação roda uma amostra determinística de 40 dos
-#                                 356 defeitos (semente = GITHUB_SHA ou o hash do commit). É a verificação do
-#                                 fluxo de PR: não espera 1h a 2h e o catálogo inteiro continua no diário.
+#                                 356 defeitos (semente = GITHUB_SHA ou o hash do commit) e o fuzzing profundo
+#                                 roda 200 mil entradas em vez de 2 milhões. É a verificação do fluxo de PR:
+#                                 não espera 1h a 2h, e o catálogo inteiro e as 2 milhões continuam no diário.
 #      ./verificar.sh --rapido    só as etapas rápidas, para o dia a dia. Termina com código 3 e a palavra
 #                                 PARCIAL: nunca vale como verificação, nem no CI, nem no selo.
 # Variáveis opcionais: CARGO=cargo-1.91  ADVISORY_DB=/caminho/advisory-db  MUTANTES_AMOSTRA=40  MUTANTES_SEMENTE=<sha>
 set -eu
 CARGO="${CARGO:-cargo}"
 AMOSTRA="${MUTANTES_AMOSTRA:-40}"
+# Fuzzing profundo: 2 milhões na campanha integral (sentinela diário), 200 mil no fluxo de PR. A catraca
+# vigia o valor integral: baixá-lo é edição visível em arquivo protegido, como o piso dos testes.
+FUZZ_INTEGRAL=2000000
+FUZZ_FLUXO=200000
 MODO=completo
 case "${1:-}" in
   ""|--completo) MODO=completo ;;
@@ -129,12 +134,13 @@ else
 fi
 "$CARGO" test --profile verificacao --test timing --locked -q -- --ignored >"$TMP/timing.log" 2>&1 && grep -q "1 passed" "$TMP/timing.log" && ok "tempo constante: PIN real, de coação e errado levam o mesmo tempo" || { tail -15 "$TMP/timing.log"; falha "tempo constante"; }
 "$CARGO" test --release --test tempo_de_recusa --locked -q -- --ignored >"$TMP/recusa.log" 2>&1 && grep -q "1 passed" "$TMP/recusa.log" && ok "tempo de recusa: não revela se uma caixa ou aparelho existe" || { tail -15 "$TMP/recusa.log"; falha "tempo de recusa"; }
-FUZZ_RODADAS=2000000 "$CARGO" test --profile verificacao --test fuzzing --locked -q -- --ignored >"$TMP/fuzz2.log" 2>&1 && grep -q "1 passed" "$TMP/fuzz2.log" && ok "fuzzing profundo: 2 milhões de entradas por alvo, nenhum pânico" || { tail -20 "$TMP/fuzz2.log"; falha "fuzzing profundo"; }
+if [ "$MODO" = amostra ]; then FUZZ_PROFUNDO="$FUZZ_FLUXO"; else FUZZ_PROFUNDO="$FUZZ_INTEGRAL"; fi
+FUZZ_RODADAS="$FUZZ_PROFUNDO" "$CARGO" test --profile verificacao --test fuzzing --locked -q -- --ignored >"$TMP/fuzz2.log" 2>&1 && grep -q "1 passed" "$TMP/fuzz2.log" && ok "fuzzing profundo: $FUZZ_PROFUNDO entradas por alvo, nenhum pânico" || { tail -20 "$TMP/fuzz2.log"; falha "fuzzing profundo"; }
 echo "  • fora deste comando (exigem aparelho físico): cd core/nimbus-nucleo && cargo test --test aparelho_real -- --ignored"
 confere_identidade
 if [ "$MODO" = amostra ]; then
-  echo "Tudo certo (AMOSTRA): $ETAPAS etapas rodaram e passaram, com $AMOSTRA de $CATALOGO defeitos plantados (semente $SEMENTE)."
-  echo "A campanha integral dos $CATALOGO roda no sentinela diário; a semente muda a cada commit e cobre o resto ao longo do tempo."
+  echo "Tudo certo (AMOSTRA): $ETAPAS etapas rodaram e passaram, com $AMOSTRA de $CATALOGO defeitos plantados (semente $SEMENTE) e $FUZZ_FLUXO entradas de fuzzing por alvo."
+  echo "A campanha integral dos $CATALOGO e as $FUZZ_INTEGRAL entradas rodam no sentinela diário; a semente muda a cada commit e cobre o resto ao longo do tempo."
 else
   echo "Tudo certo: $ETAPAS etapas obrigatórias rodaram e passaram (código $IDENTIDADE)."
 fi

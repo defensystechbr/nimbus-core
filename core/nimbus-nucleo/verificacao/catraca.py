@@ -267,6 +267,11 @@ if len(sys.argv) > 1:
             falha('sentinela diária sem a base de avisos do dia')
         if './verificar.sh --completo' not in sent_t:
             falha('sentinela diária sem a campanha integral de mutação (./verificar.sh --completo)')
+        # A amostra também encurta o fuzzing (200 mil no fluxo). O valor integral de 2 milhões é o que
+        # sustenta a alegação do diário: se ele cair no verificar.sh, a amostra vira o teto do projeto.
+        verificar_sh = open(os.path.join(kit, 'verificar.sh'), encoding='utf-8').read()
+        if 'FUZZ_INTEGRAL=2000000' not in verificar_sh:
+            falha('verificar.sh sem a campanha integral de fuzzing (FUZZ_INTEGRAL=2000000)')
         # Ferramentas de CI com versão fixada: instalar "a mais nova" no CI é porta de ataque à cadeia de suprimentos.
         for wf in glob.glob(os.path.join(kit, '.github', 'workflows', '*.yml')):
             for l_ in open(wf, encoding='utf-8'):
