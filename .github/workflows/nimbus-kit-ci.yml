@@ -20,8 +20,8 @@ jobs:
         run: |
           pip install semgrep==1.179.0
           git clone --depth 1 https://github.com/RustSec/advisory-db /tmp/advisory-db
-      - name: Verificação COMPLETA do kit (testes, catraca, exemplo, fuzzing profundo, tempo constante, mutação, varredura, dependências, consistência)
-        run: ./verificar.sh --completo
+      - name: Verificação do kit no fluxo (testes, catraca, exemplo, fuzzing, tempo constante, mutação por amostra de 40, varredura, dependências, consistência)
+        run: ./verificar.sh --amostra
   segredos:
     runs-on: ubuntu-24.04
     steps:

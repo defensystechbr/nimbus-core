@@ -7,17 +7,22 @@
 #                                 consistência no kit, mutação completa, tempo constante, tempo de recusa e
 #                                 fuzzing profundo de 2 milhões). Cerca de 25 min numa máquina de 8 núcleos;
 #                                 bem mais numa de 1 núcleo.
-#      ./verificar.sh --completo  o mesmo (mantido por compatibilidade com o CI).
+#      ./verificar.sh --completo  o mesmo (mantido por compatibilidade com o CI e com o sentinela diário).
+#      ./verificar.sh --amostra   tudo do completo, mas a mutação roda uma amostra determinística de 40 dos
+#                                 356 defeitos (semente = GITHUB_SHA ou o hash do commit). É a verificação do
+#                                 fluxo de PR: não espera 1h a 2h e o catálogo inteiro continua no diário.
 #      ./verificar.sh --rapido    só as etapas rápidas, para o dia a dia. Termina com código 3 e a palavra
 #                                 PARCIAL: nunca vale como verificação, nem no CI, nem no selo.
-# Variáveis opcionais: CARGO=cargo-1.91  ADVISORY_DB=/caminho/advisory-db
+# Variáveis opcionais: CARGO=cargo-1.91  ADVISORY_DB=/caminho/advisory-db  MUTANTES_AMOSTRA=40  MUTANTES_SEMENTE=<sha>
 set -eu
 CARGO="${CARGO:-cargo}"
+AMOSTRA="${MUTANTES_AMOSTRA:-40}"
 MODO=completo
 case "${1:-}" in
   ""|--completo) MODO=completo ;;
+  --amostra) MODO=amostra ;;
   --rapido) MODO=rapido ;;
-  *) echo "Opção desconhecida: $1 (use --rapido ou nada)"; exit 1 ;;
+  *) echo "Opção desconhecida: $1 (use --rapido, --amostra ou nada)"; exit 1 ;;
 esac
 RAIZ="$(cd "$(dirname "$0")" && pwd)"
 if [ -d "$RAIZ/core/nimbus-nucleo" ]; then NUCLEO="$RAIZ/core/nimbus-nucleo"; NO_KIT=1; else NUCLEO="$RAIZ"; NO_KIT=0; fi
@@ -105,14 +110,31 @@ if [ "${LIVRE_KB:-0}" -lt 3000000 ]; then
   echo "  • atenção: menos de 3 GB livres; a mutação pode encher o disco. Se algo falhar sem motivo: rm -rf target e rode de novo."
 fi
 MINIMO_MUT=$(python3 -c "import json;print(json.load(open('CATRACA.json'))['defeitos_plantados_minimos'])")
-CARGO="$CARGO" python3 verificacao/mutantes.py >"$TMP/mutacao.log" 2>&1 || { grep -E 'VIVO|ERRO|Resultado|precisam' "$TMP/mutacao.log"; falha "mutação: algum defeito plantado não foi pego ou não compilou"; }
-PEGOS=$(sed -n 's/^Resultado: \([0-9]*\) de \([0-9]*\) .*/\1 \2/p' "$TMP/mutacao.log")
-set -- $PEGOS
-[ "${1:-0}" = "${2:-x}" ] && [ "${2:-0}" -ge "$MINIMO_MUT" ] || falha "mutação incompleta: ${1:-0} de ${2:-0} (mínimo $MINIMO_MUT)"
-ok "mutação completa: $1 de $2 defeitos plantados pegos"
+# O catálogo não pode encolher por causa da amostra: quem confere o total é este número, não a quantidade rodada.
+CATALOGO=$(python3 -c "import sys; sys.path.insert(0, 'verificacao'); import mutantes; print(len(mutantes.MUTANTES))")
+[ "$CATALOGO" -ge "$MINIMO_MUT" ] || falha "catálogo de defeitos plantados encolheu: $CATALOGO < $MINIMO_MUT"
+if [ "$MODO" = amostra ]; then
+  SEMENTE="${MUTANTES_SEMENTE:-${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo local)}}"
+  MUTANTES_AMOSTRA="$AMOSTRA" MUTANTES_SEMENTE="$SEMENTE" CARGO="$CARGO" python3 verificacao/mutantes.py >"$TMP/mutacao.log" 2>&1 || { grep -E 'VIVO|ERRO|Resultado|precisam' "$TMP/mutacao.log"; falha "mutação por amostra: algum defeito plantado não foi pego ou não compilou"; }
+  PEGOS=$(sed -n 's/^Resultado: \([0-9]*\) de \([0-9]*\) .*/\1 \2/p' "$TMP/mutacao.log")
+  set -- $PEGOS
+  [ "${1:-0}" = "${2:-0}" ] && [ "${2:-0}" -eq "$AMOSTRA" ] || falha "amostra de mutação incompleta: ${1:-0} de ${2:-0} (esperado $AMOSTRA)"
+  ok "mutação por amostra: $1 de $2 de $CATALOGO defeitos plantados pegos (semente ${SEMENTE%"${SEMENTE#????????????}"})"
+else
+  CARGO="$CARGO" python3 verificacao/mutantes.py >"$TMP/mutacao.log" 2>&1 || { grep -E 'VIVO|ERRO|Resultado|precisam' "$TMP/mutacao.log"; falha "mutação: algum defeito plantado não foi pego ou não compilou"; }
+  PEGOS=$(sed -n 's/^Resultado: \([0-9]*\) de \([0-9]*\) .*/\1 \2/p' "$TMP/mutacao.log")
+  set -- $PEGOS
+  [ "${1:-0}" = "${2:-x}" ] && [ "${2:-0}" -ge "$MINIMO_MUT" ] || falha "mutação incompleta: ${1:-0} de ${2:-0} (mínimo $MINIMO_MUT)"
+  ok "mutação completa: $1 de $2 defeitos plantados pegos"
+fi
 "$CARGO" test --profile verificacao --test timing --locked -q -- --ignored >"$TMP/timing.log" 2>&1 && grep -q "1 passed" "$TMP/timing.log" && ok "tempo constante: PIN real, de coação e errado levam o mesmo tempo" || { tail -15 "$TMP/timing.log"; falha "tempo constante"; }
 "$CARGO" test --release --test tempo_de_recusa --locked -q -- --ignored >"$TMP/recusa.log" 2>&1 && grep -q "1 passed" "$TMP/recusa.log" && ok "tempo de recusa: não revela se uma caixa ou aparelho existe" || { tail -15 "$TMP/recusa.log"; falha "tempo de recusa"; }
 FUZZ_RODADAS=2000000 "$CARGO" test --profile verificacao --test fuzzing --locked -q -- --ignored >"$TMP/fuzz2.log" 2>&1 && grep -q "1 passed" "$TMP/fuzz2.log" && ok "fuzzing profundo: 2 milhões de entradas por alvo, nenhum pânico" || { tail -20 "$TMP/fuzz2.log"; falha "fuzzing profundo"; }
 echo "  • fora deste comando (exigem aparelho físico): cd core/nimbus-nucleo && cargo test --test aparelho_real -- --ignored"
 confere_identidade
-echo "Tudo certo: $ETAPAS etapas obrigatórias rodaram e passaram (código $IDENTIDADE)."
+if [ "$MODO" = amostra ]; then
+  echo "Tudo certo (AMOSTRA): $ETAPAS etapas rodaram e passaram, com $AMOSTRA de $CATALOGO defeitos plantados (semente $SEMENTE)."
+  echo "A campanha integral dos $CATALOGO roda no sentinela diário; a semente muda a cada commit e cobre o resto ao longo do tempo."
+else
+  echo "Tudo certo: $ETAPAS etapas obrigatórias rodaram e passaram (código $IDENTIDADE)."
+fi
